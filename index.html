@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#3A3C3C">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="WRI Recon">
+  <title>WRI Recon</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26-1">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+  <header class="header">
+    <img src="assets/wri-logo.png" alt="" class="logo">
+    <h1>Recon</h1>
+    <button class="hdr-btn" id="savedBtn" type="button">Saved <span id="savedCount"></span></button>
+  </header>
+  <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+
+  <div class="banner hidden" id="banner"></div>
+  <div class="card hidden" id="a2hsCard">
+    <b>Add Recon to your Home Screen.</b> Saved points are only safe from being cleared by the phone when Recon is on your Home Screen.
+    Tap <b>Share</b> then <b>Add to Home Screen</b>.
+    <button class="link" id="a2hsDismiss" type="button">Got it</button>
+  </div>
+
+  <main id="steps">
+    <!-- STEP 1 -->
+    <section class="step" data-step="1">
+      <div class="step-title">Incident &amp; Location</div>
+      <div class="field"><label for="incidentSel">Incident</label><select id="incidentSel"></select>
+        <div class="hint" id="incidentHint"></div></div>
+      <div class="field"><label for="obsTime">Date/Time</label><input type="datetime-local" id="obsTime"></div>
+      <label>Location</label>
+      <button class="btn btn-gps" id="gpsBtn" type="button">Use My Location</button>
+      <div class="coords" id="coords">No location yet</div>
+      <div class="map-wrap"><div id="map"></div><div class="map-msg" id="mapMsg">Map needs signal. Use GPS or type the coordinates.</div></div>
+      <div class="row">
+        <div class="field"><label for="lat">Lat</label><input id="lat" inputmode="decimal" placeholder="46.8721"></div>
+        <div class="field"><label for="lon">Lon</label><input id="lon" inputmode="decimal" placeholder="-113.9940"></div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="step" data-step="2">
+      <div class="step-title">Reporter</div>
+      <label>Are you a WRI employee?</label>
+      <div class="toggle" id="wriToggle"><button type="button" data-val="yes" class="active">Yes</button><button type="button" data-val="no">No</button></div>
+      <div id="wriBox">
+        <div class="field"><label for="wriName">Name</label><select id="wriName"></select></div>
+        <div class="field hidden" id="wriOtherBox"><label for="wriOther">Other name</label><input id="wriOther" placeholder="Your name"></div>
+      </div>
+      <div id="extBox" class="hidden">
+        <div class="field"><label for="extName">Name</label><input id="extName" placeholder="Your name"></div>
+        <div class="field"><label for="extAff">Affiliation</label><select id="extAff"></select></div>
+        <div class="field hidden" id="affDescBox"><label for="affDesc">Affiliation description</label><input id="affDesc" placeholder="Agency or company name"></div>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="step" data-step="3">
+      <div class="step-title">Observation Type</div>
+      <div class="note">One item per point. Save a separate point for each observation.</div>
+      <div class="cat-tabs" id="catTabs"></div>
+      <div class="obs-grid" id="obsGrid"></div>
+      <div class="hidden" id="subBox"><label>Sub-type</label><div class="chips" id="subChips"></div></div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section class="step" data-step="4">
+      <div class="step-title">Details &amp; Photos</div>
+      <div class="field"><label for="desc">Description</label><textarea id="desc" placeholder="Describe the observation..."></textarea></div>
+      <div class="field"><label for="tfName">Task Force / Strike Team (optional)</label><input id="tfName" placeholder="e.g. TF Bravo"></div>
+      <div class="field"><label for="tfStatus">TF status (optional)</label>
+        <select id="tfStatus"><option value="">—</option><option value="current">Current</option><option value="planned">Planned</option></select></div>
+      <div class="row photo-btns">
+        <button class="btn btn-ghost" type="button" id="camBtn">📷 Take Photo</button>
+        <button class="btn btn-ghost" type="button" id="galBtn">🖼️ Add Photos</button>
+      </div>
+      <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+      <input type="file" id="galInput" accept="image/*" multiple hidden>
+      <div class="hint center" id="photoCount">0 photos</div>
+      <div class="photo-grid" id="photoGrid"></div>
+    </section>
+
+    <!-- STEP 5 -->
+    <section class="step" data-step="5">
+      <div class="step-title">Review</div>
+      <div class="review" id="review"></div>
+      <div class="hint">Saving puts the point on this phone first. It uploads by itself whenever there's signal.</div>
+    </section>
+  </main>
+
+  <nav class="nav">
+    <button class="btn btn-back hidden" id="backBtn" type="button">Back</button>
+    <button class="btn btn-next" id="nextBtn" type="button">Next</button>
+    <button class="btn btn-save hidden" id="saveBtn" type="button">Save point</button>
+  </nav>
+
+  <!-- PIN -->
+  <div class="overlay hidden" id="pinOverlay">
+    <div class="box">
+      <div class="box-title">Incident PIN</div>
+      <div class="hint" id="pinMsg">Enter the incident PIN. Points upload with it.</div>
+      <input id="pinInput" inputmode="numeric" autocomplete="off" placeholder="PIN">
+      <button class="btn btn-next" id="pinBtn" type="button">Continue</button>
+    </div>
+  </div>
+
+  <!-- Saved -->
+  <div class="overlay hidden" id="savedOverlay">
+    <div class="box box-wide">
+      <div class="box-title">Saved points <button class="link right" id="savedClose" type="button">Close</button></div>
+      <div class="hint" id="savedHint"></div>
+      <div id="savedList"></div>
+      <button class="btn btn-ghost" id="sendNowBtn" type="button">Upload now</button>
+    </div>
+  </div>
+
+  <!-- Done -->
+  <div class="overlay hidden" id="doneOverlay">
+    <div class="box center">
+      <div class="big">✅</div>
+      <div class="box-title" id="doneTitle">Saved</div>
+      <div class="hint" id="doneSub"></div>
+      <button class="btn btn-next" id="newBtn" type="button">New point</button>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/config.js?v=2026-10-26-1"></script>
+  <script src="js/store.js?v=2026-10-26-1"></script>
+  <script src="js/api.js?v=2026-10-26-1"></script>
+  <script src="js/outbox.js?v=2026-10-26-1"></script>
+  <script src="js/app.js?v=2026-10-26-1"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+  </script>
+</body>
+</html>
