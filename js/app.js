@@ -324,7 +324,15 @@
         if (r.status === 'sent') { cls = 'green'; st = 'Uploaded' + (r.photos_failed ? ' — ' + r.photos_failed + ' photo(s) could not upload' : '') + (r.project_name ? ' to ' + r.project_name : '') + (r.result && r.result.request_id ? ' as ' + r.result.request_id : ''); }
         else if (r.status === 'needs_pin') { cls = 'red'; st = 'Waiting for the incident PIN'; }
         else if (r.status === 'failed') { cls = 'red'; st = r.last_error || 'Could not upload'; }
-        else { cls = 'amber'; st = r.oid ? 'Point uploaded; photos ' + sent + ' of ' + r.photo_count + ' sent' : 'Waiting to upload' + (r.last_error ? ' (' + r.last_error + ')' : ''); }
+        else {
+          cls = 'amber';
+          var wait = (r.next_try || 0) - Date.now();
+          st = (r.oid ? 'Point uploaded · ' + sent + ' of ' + r.photo_count + ' photo' + (r.photo_count === 1 ? '' : 's') + ' sent' : 'Waiting to upload') +
+            (r.last_error ? ' · last try: ' + r.last_error : '') +
+            (wait > 5000 ? ' · next try in ' + (wait > 90000 ? Math.round(wait / 60000) + ' min' : Math.round(wait / 1000) + ' s') + ' (or tap Retry now)' : '');
+        }
+        var bad = (r.photos || []).filter(function (p) { return p.status === 'failed'; });
+        if (bad.length) st += ' · ' + bad.length + ' photo' + (bad.length === 1 ? '' : 's') + ' failed' + (bad[0].error ? ': ' + bad[0].error : '');
         var acts = '';
         if (r.status !== 'sent') acts += '<button class="link" data-act="retry" data-id="' + r.recon_id + '">Retry now</button>';
         if (r.status === 'failed' && r.error_code === 'incident_unknown') acts += '<button class="link" data-act="reinc" data-id="' + r.recon_id + '">File to the selected incident</button>';
@@ -360,6 +368,9 @@
 
   // ---------- upload triggers ----------
   function kick() { if (navigator.onLine) Outbox.drain().then(refreshStatus); else refreshStatus(); }
+  // signal back / app reopened: skip any backoff, try everything now
+  function wakeKick() { if (navigator.onLine) Outbox.wake().then(kick); else refreshStatus(); }
+  var hiddenAt = 0;
 
   // ---------- boot ----------
   function boot() {
@@ -414,15 +425,18 @@
 
     window.addEventListener('outbox:changed', refreshStatus);
     if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.type === 'outbox:changed') refreshStatus(); });
-    window.addEventListener('online', function () { initMap(); kick(); });
+    window.addEventListener('online', function () { initMap(); wakeKick(); });
     window.addEventListener('offline', refreshStatus);
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') kick(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      if (hiddenAt && Date.now() - hiddenAt > 60000) wakeKick(); else kick();   // back after a while = a fresh open
+    });
     window.addEventListener('focus', kick);
     setInterval(function () { if (document.visibilityState === 'visible') kick(); }, 30000);
 
     loadConfig().then(function () { return Store.kvGet('pin'); }).then(function (pin) {
       if (!pin) askPin();
-      setTimeout(kick, 800);
+      setTimeout(wakeKick, 800);
     });
     refreshStatus();
   }

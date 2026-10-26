@@ -34,7 +34,9 @@
     });
   }
 
-  function uploadTimeout(bytes) { return Math.max(60000, Math.round(bytes / 15)); }   // ~15 KB/s floor
+  // ~8 KB/s floor (one bar of cell signal), 90 s minimum, 5 min cap -- a photo that times out
+  // on a weak signal is re-sent whole, so a too-short timeout never finishes
+  function uploadTimeout(bytes) { return Math.min(300000, Math.max(90000, Math.round(bytes / 8))); }
 
   var Outbox = {
     /** Save a point + its photo Blobs. record: {recon_id, incident, fields}; photos: [{blob, name}] */
@@ -85,6 +87,15 @@
           r.photos = ps.map(function (p) { return { idx: p.idx, status: p.status, error: p.last_error || '', blob: p.blob || null }; });
           return r;
         });
+      });
+    },
+
+    /** Signal is back / the app was reopened: everything still queued tries again now instead of
+     *  waiting out its backoff (a weak-signal timeout must not park a photo for 10 min). */
+    wake: function () {
+      return Store.all('records').then(function (rs) {
+        return Promise.all((rs || []).filter(function (r) { return r.status === 'queued' && (r.next_try || 0) > Date.now(); })
+          .map(function (r) { r.next_try = 0; return Store.put('records', r); }));
       });
     },
 
