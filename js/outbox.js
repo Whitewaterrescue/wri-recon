@@ -15,7 +15,7 @@
  */
 (function (g) {
   var BACKOFF_MIN = 20000, BACKOFF_MAX = 10 * 60000, KEEP_SENT_MS = 24 * 3600000;
-  var running = false;
+  var running = false, lastCreated = 0;
 
   function emit() {
     try {
@@ -39,7 +39,8 @@
   var Outbox = {
     /** Save a point + its photo Blobs. record: {recon_id, incident, fields}; photos: [{blob, name}] */
     enqueue: function (record, photos) {
-      record.created_at = Date.now();
+      // strictly increasing, so steps saved in the same millisecond still upload in order
+      record.created_at = lastCreated = Math.max(Date.now(), lastCreated + 1);
       record.status = 'queued';
       record.attempts = 0; record.next_try = 0;
       record.photo_count = photos.length;
@@ -137,10 +138,16 @@
       if (!pin) {   // nothing can go without the PIN: park them where the UI asks for it
         return Promise.all(due.map(function (r) { r.status = 'needs_pin'; return Store.put('records', r); }));
       }
+      // A vessel trip's steps must land in order (board before disembark before return):
+      // once one step of a trip fails, the rest of that trip waits for the next drain.
+      var blockedTrip = {};
+      var tripOf = function (r) { return r.kind === 'vessel' && r.fields ? r.fields.trip_key : ''; };
       return due.reduce(function (p, r) {
         return p.then(function () {
-          if (stop || (r.next_try || 0) > Date.now()) return;
+          if (stop || (r.next_try || 0) > Date.now()) { if (tripOf(r)) blockedTrip[tripOf(r)] = 1; return; }
+          if (tripOf(r) && blockedTrip[tripOf(r)]) return;
           return sendRecord(r, pin, device).catch(function (e) {
+            if (tripOf(r)) blockedTrip[tripOf(r)] = 1;
             if (e.code === 'pin_invalid') {
               stop = true;
               return Store.all('records').then(function (rs) {
@@ -162,7 +169,26 @@
       .then(function () { running = false; emit(); });
   }
 
+  /**
+   * Form kinds other than recon: one POST to the API of the app that owns the data
+   * ({action:'submit', payload:{pin, device, id, incident_id, ...fields}}), idempotent by id.
+   * Registered by the page and the worker from js/forms.js (FORM_KINDS).
+   */
+  function sendSimple(r, pin, device, kind) {
+    return Api.post(kind.action || 'submit', Object.assign({}, r.fields, {
+      pin: pin, device: device, id: r.recon_id, incident_id: r.incident && r.incident.incident_id, queued_at: r.created_at
+    }), kind.timeout || 45000, kind.url()).then(function (d) {
+      r.result = d || {}; r.status = 'sent'; r.sent_at = Date.now(); r.last_error = ''; r.photos_failed = 0;
+      return Store.put('records', r);
+    });
+  }
+
   function sendRecord(r, pin, device) {
+    var kind = r.kind && r.kind !== 'recon' && g.FORM_KINDS && g.FORM_KINDS[r.kind];
+    if (r.kind && r.kind !== 'recon') {
+      if (!kind) return Promise.reject(Object.assign(new Error('This app version can’t send ' + r.kind + ' records — reload'), { permanent: true, code: 'bad_request' }));
+      return sendSimple(r, pin, device, kind);
+    }
     var first = r.oid ? Promise.resolve() : Api.post('submit', Object.assign({}, r.fields, {
       pin: pin, device: device, recon_id: r.recon_id, incident_id: r.incident.incident_id, photo_count: r.photo_count
     })).then(function (d) {

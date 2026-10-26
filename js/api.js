@@ -37,8 +37,9 @@
     getConfig: function () {
       return call(CONFIG.API_URL + '?api=config', { method: 'GET', redirect: 'follow' }, 30000);
     },
-    post: function (action, payload, timeoutMs) {
-      return call(CONFIG.API_URL, {
+    // url: another app's API (each form posts to the Apps Script that owns its data); default = Recon
+    post: function (action, payload, timeoutMs, url) {
+      return call(url || CONFIG.API_URL, {
         method: 'POST', redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: action, payload: payload })

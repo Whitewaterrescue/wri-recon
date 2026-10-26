@@ -84,7 +84,8 @@
     sel.value = pick.incident_id; setIncident(pick);
   }
   function setIncident(r) {
-    S.incident = r ? { incident_id: r.incident_id, project_key: r.project_key, client_name: r.client_name } : null;
+    S.incident = r ? { incident_id: r.incident_id, project_key: r.project_key, client_name: r.client_name, incident_name: r.incident_name || r.project_key } : null;
+    window.dispatchEvent(new Event('incident:changed'));
     if (r) lsSet('wri_recon_incident', r.incident_id);
     $('incidentHint').textContent = r ? 'Files to ' + r.project_key + ' (' + r.client_name + ').' : '';
   }
@@ -260,7 +261,7 @@
       $('doneTitle').textContent = 'Saved on this phone';
       $('doneSub').textContent = navigator.onLine ? 'Uploading now…' : 'No signal: it uploads by itself when you’re back in coverage. Open Recon then.';
       $('doneOverlay').classList.remove('hidden');
-      try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }); } catch (e) {}
+      try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
     }, function (e) {
       busy(b, false); toast('Could not save on this phone: ' + e.message + '. Free up storage and try again.', 8000);
     });
@@ -303,11 +304,11 @@
       var waiting = s.queued, bn = $('banner');
       $('savedCount').textContent = (waiting + s.needs_pin + s.failed) ? '(' + (waiting + s.needs_pin + s.failed) + ')' : '';
       bn.className = 'banner';
-      if (s.needs_pin) { bn.classList.add('red'); bn.textContent = s.needs_pin + ' point(s) waiting for the incident PIN — tap to enter it'; bn.dataset.act = 'pin'; }
-      else if (s.failed) { bn.classList.add('red'); bn.textContent = s.failed + ' point(s) need attention — tap to see'; bn.dataset.act = 'list'; }
+      if (s.needs_pin) { bn.classList.add('red'); bn.textContent = s.needs_pin + ' saved item(s) waiting for the incident PIN — tap to enter it'; bn.dataset.act = 'pin'; }
+      else if (s.failed) { bn.classList.add('red'); bn.textContent = s.failed + ' saved item(s) need attention — tap to see'; bn.dataset.act = 'list'; }
       else if (waiting) {
         bn.classList.add('amber');
-        bn.textContent = waiting + ' point(s), ' + s.photos_waiting + ' photo(s) waiting to upload' + (navigator.onLine ? ' — uploading…' : ' — no signal. Open Recon when you’re back in coverage.');
+        bn.textContent = waiting + ' saved item(s)' + (s.photos_waiting ? ', ' + s.photos_waiting + ' photo(s)' : '') + ' waiting to upload' + (navigator.onLine ? ' — uploading…' : ' — no signal. Open this app when you’re back in coverage.');
         bn.dataset.act = 'list';
       } else { bn.classList.add('hidden'); }
       if (!$('savedOverlay').classList.contains('hidden')) renderSaved();
@@ -315,11 +316,12 @@
   }
   function renderSaved() {
     Outbox.list().then(function (rs) {
-      $('savedHint').textContent = rs.length ? 'Points stay here for a day after they upload.' : 'Nothing saved on this phone.';
+      $('savedHint').textContent = rs.length ? 'Items stay here for a day after they upload.' : 'Nothing saved on this phone.';
       $('savedList').innerHTML = rs.map(function (r) {
         var t = typeObj(r.fields.observation_type), sent = r.photos.filter(function (p) { return p.status === 'sent'; }).length;
+        var title = (!r.kind || r.kind === 'recon') ? ((t && t.label) || r.fields.observation_type) : recordTitle(r);
         var st, cls;
-        if (r.status === 'sent') { cls = 'green'; st = 'Uploaded' + (r.photos_failed ? ' — ' + r.photos_failed + ' photo(s) could not upload' : '') + (r.project_name ? ' to ' + r.project_name : ''); }
+        if (r.status === 'sent') { cls = 'green'; st = 'Uploaded' + (r.photos_failed ? ' — ' + r.photos_failed + ' photo(s) could not upload' : '') + (r.project_name ? ' to ' + r.project_name : '') + (r.result && r.result.request_id ? ' as ' + r.result.request_id : ''); }
         else if (r.status === 'needs_pin') { cls = 'red'; st = 'Waiting for the incident PIN'; }
         else if (r.status === 'failed') { cls = 'red'; st = r.last_error || 'Could not upload'; }
         else { cls = 'amber'; st = r.oid ? 'Point uploaded; photos ' + sent + ' of ' + r.photo_count + ' sent' : 'Waiting to upload' + (r.last_error ? ' (' + r.last_error + ')' : ''); }
@@ -328,8 +330,8 @@
         if (r.status === 'failed' && r.error_code === 'incident_unknown') acts += '<button class="link" data-act="reinc" data-id="' + r.recon_id + '">File to the selected incident</button>';
         if (r.status === 'sent' && r.photos_failed) acts += '<button class="link" data-act="retry" data-id="' + r.recon_id + '">Retry photos</button>';
         acts += '<button class="link" data-act="discard" data-id="' + r.recon_id + '">Discard</button>';
-        return '<div class="item"><div class="t">' + esc((t && t.label) || r.fields.observation_type) + ' · ' + esc(r.incident.project_key) + '</div>' +
-          '<div>' + new Date(r.created_at).toLocaleString() + ' · ' + r.photo_count + ' photo(s)</div>' +
+        return '<div class="item"><div class="t">' + esc(title) + ' · ' + esc(r.incident ? r.incident.project_key : '') + '</div>' +
+          '<div>' + new Date(r.created_at).toLocaleString() + (r.photo_count ? ' · ' + r.photo_count + ' photo(s)' : '') + '</div>' +
           '<div class="s ' + cls + '">' + esc(st) + '</div><div class="acts">' + acts + '</div></div>';
       }).join('');
     });
@@ -345,6 +347,15 @@
       if (!S.incident) { toast('Pick an incident on the first screen first.'); return; }
       busy(b, true, 'Sending…'); Outbox.retry(id, S.incident).then(renderSaved);
     }
+  }
+
+  function recordTitle(r) {
+    var f = r.fields || {};
+    if (r.kind === '214') return '214: ' + String(f.activity || '').slice(0, 60);
+    if (r.kind === 'rr') return 'Request: ' + String(f.item || '').slice(0, 60);
+    if (r.kind === 'hasp') return 'HASP sign-off: ' + (f.employeeName || '');
+    if (r.kind === 'vessel') return 'Vessel ' + f.step + ': ' + (f.passenger_name || f.vessel || '');
+    return r.kind;
   }
 
   // ---------- upload triggers ----------
@@ -415,5 +426,8 @@
     });
     refreshStatus();
   }
+  window.WRIApp = { S: S, $: $, esc: esc, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
+    refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
+    askPin: function (m) { askPin(m); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
   document.addEventListener('DOMContentLoaded', boot);
 })();

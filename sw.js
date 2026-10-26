@@ -1,4 +1,4 @@
-/* WRI Recon (offline) — service worker.
+/* WRI Field Forms (offline: Recon, 214, HASP, Vessel, 213-RR) — service worker.
  *
  * - Shell: precached, network-first with an 8 s race, cache fallback, so the
  *   app opens with no signal and updates when there is.
@@ -10,18 +10,20 @@
  *
  * APP_VERSION must equal the ?v= stamps in index.html; bump both together.
  */
-var APP_VERSION = '2026-10-26-1';
+var APP_VERSION = '2026-10-26-2';
 var CACHE = 'wri-recon-' + APP_VERSION;
 var LIB_CACHE = 'wri-recon-lib-leaflet-1.9.4';
 
-importScripts('js/config.js?v=' + APP_VERSION, 'js/store.js?v=' + APP_VERSION, 'js/api.js?v=' + APP_VERSION, 'js/outbox.js?v=' + APP_VERSION);
+importScripts('js/config.js?v=' + APP_VERSION, 'js/store.js?v=' + APP_VERSION, 'js/api.js?v=' + APP_VERSION,
+  'js/forms.js?v=' + APP_VERSION, 'js/outbox.js?v=' + APP_VERSION);
 
 var SHELL = [
   './', './index.html', './manifest.json', './assets/wri-logo.png',
   './assets/icons/icon-192.png', './assets/icons/icon-512.png',
   './css/app.css?v=' + APP_VERSION,
   './js/config.js?v=' + APP_VERSION, './js/store.js?v=' + APP_VERSION, './js/api.js?v=' + APP_VERSION,
-  './js/outbox.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION
+  './js/outbox.js?v=' + APP_VERSION, './js/forms.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION,
+  './js/forms-ui.js?v=' + APP_VERSION
 ].concat(['aid_station', 'boat_ramp', 'current_boom_site', 'decon', 'drone_flight', 'fish_kill', 'hospital', 'icp',
   'injured_wildlife', 'injury', 'landing_zone', 'near_miss', 'oil_spotted', 'other_action', 'other_observation',
   'other_safety', 'planned_boom_site', 'planned_staging_area', 'recovery_complete', 'response_action', 'river_hazard',

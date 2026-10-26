@@ -5,21 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#3A3C3C">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="WRI Recon">
-  <title>WRI Recon</title>
+  <meta name="apple-mobile-web-app-title" content="WRI Forms">
+  <title>WRI Field Forms</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26-1">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26-2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
   <header class="header">
     <img src="assets/wri-logo.png" alt="" class="logo">
-    <h1>Recon</h1>
+    <h1 id="viewTitle">Recon</h1>
     <button class="hdr-btn" id="savedBtn" type="button">Saved <span id="savedCount"></span></button>
   </header>
-  <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+  <nav class="tabs" id="tabs">
+    <button type="button" data-view="recon" class="active">Recon</button>
+    <button type="button" data-view="214">214 Log</button>
+    <button type="button" data-view="hasp">HASP</button>
+    <button type="button" data-view="vessel">Vessel</button>
+    <button type="button" data-view="rr">Request</button>
+  </nav>
+  <div class="incbar"><label for="incidentSel">Incident</label><select id="incidentSel"></select></div>
+  <div class="hint incbar-hint" id="incidentHint"></div>
+  <div class="progress" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
 
   <div class="banner hidden" id="banner"></div>
   <div class="card hidden" id="a2hsCard">
@@ -28,12 +37,10 @@
     <button class="link" id="a2hsDismiss" type="button">Got it</button>
   </div>
 
-  <main id="steps">
+  <main id="steps" class="view" data-view="recon">
     <!-- STEP 1 -->
     <section class="step" data-step="1">
-      <div class="step-title">Incident &amp; Location</div>
-      <div class="field"><label for="incidentSel">Incident</label><select id="incidentSel"></select>
-        <div class="hint" id="incidentHint"></div></div>
+      <div class="step-title">When &amp; Where</div>
       <div class="field"><label for="obsTime">Date/Time</label><input type="datetime-local" id="obsTime"></div>
       <label>Location</label>
       <button class="btn btn-gps" id="gpsBtn" type="button">Use My Location</button>
@@ -95,6 +102,103 @@
     </section>
   </main>
 
+  <!-- ICS 214 -->
+  <main class="view hidden" data-view="214">
+    <div class="step-title">ICS 214 Activity Log</div>
+    <div class="field"><label for="l214Name">Your name</label><select id="l214Name"></select></div>
+    <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
+    <div class="field"><label for="l214Pos">ICS position (optional)</label><input id="l214Pos" placeholder="e.g. Div A Supervisor"></div>
+    <div class="field"><label for="l214Time">When</label><input type="datetime-local" id="l214Time"></div>
+    <div class="field"><label for="l214Act">Activity</label><textarea id="l214Act" placeholder="What happened / what you did"></textarea></div>
+    <label class="check"><input type="checkbox" id="l214Unit" checked> Also add to the unit log</label>
+    <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
+    <div class="sub-title">My notes on this phone</div>
+    <div id="l214List"></div>
+  </main>
+
+  <!-- HASP -->
+  <main class="view hidden" data-view="hasp">
+    <div class="step-title">HASP sign-off</div>
+    <div class="hint" id="haspHint"></div>
+    <div id="haspList"></div>
+    <div id="haspDetail" class="hidden">
+      <button class="link" id="haspBack" type="button">&lsaquo; All HASPs</button>
+      <div class="review scroll" id="haspBody"></div>
+      <div class="hint" id="haspAcked"></div>
+      <div class="field"><label for="haspName">Your name</label><select id="haspName"></select></div>
+      <div class="field hidden" id="haspOtherBox"><label for="haspOther">Other name</label><input id="haspOther" placeholder="Your name"></div>
+      <label>Signature (optional)</label>
+      <canvas id="sigPad" class="sig"></canvas>
+      <button class="link" id="sigClear" type="button">Clear signature</button>
+      <label class="check"><input type="checkbox" id="haspRead"> I have read this HASP and understand the hazards and controls</label>
+      <button class="btn btn-save wide" id="haspSave" type="button">Sign off</button>
+    </div>
+  </main>
+
+  <!-- Vessel -->
+  <main class="view hidden" data-view="vessel">
+    <div class="step-title">Vessel manifest</div>
+    <div id="tripStart">
+      <div class="hint">Start the trip at the ramp. Board and disembark passengers on this phone, signal or not.</div>
+      <div class="field"><label for="vVessel">Vessel</label><select id="vVessel"></select></div>
+      <div class="field"><label for="vOperator">Operator</label><select id="vOperator"></select></div>
+      <div class="field"><label for="vTech">Technician (optional)</label><select id="vTech"></select></div>
+      <div class="field"><label for="vRamp">Boat ramp / launch</label><input id="vRamp" placeholder="Ramp name"></div>
+      <button class="btn btn-gps" id="vGps" type="button">Use My Location for the ramp</button>
+      <div class="field"><label for="vPlan">Operational plan</label><textarea id="vPlan" placeholder="Where you are going and why"></textarea></div>
+      <button class="btn btn-save wide" id="vStart" type="button">Depart</button>
+    </div>
+    <div id="tripLive" class="hidden">
+      <div class="review" id="tripHead"></div>
+      <div class="sub-title">Board a passenger</div>
+      <div class="field"><input id="pName" list="pNames" placeholder="Passenger name"><datalist id="pNames"></datalist></div>
+      <div class="row">
+        <div class="field"><input id="pOrg" placeholder="Organization"></div>
+        <div class="field"><input id="pTask" placeholder="Task / destination"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="pBrief"> Safety briefing given (PFD, emergency, comms)</label>
+      <button class="btn btn-next wide" id="pBoard" type="button">Board</button>
+      <div class="sub-title">Aboard (<span id="aboardCount">0</span>)</div>
+      <div id="aboardList"></div>
+      <div class="field"><label for="vNotes">Return notes</label><textarea id="vNotes" placeholder="Anything to report"></textarea></div>
+      <button class="btn btn-back wide" id="vReturn" type="button">Return to ramp</button>
+    </div>
+  </main>
+
+  <!-- 213-RR -->
+  <main class="view hidden" data-view="rr">
+    <div class="step-title">Resource request (213-RR)</div>
+    <div class="field"><label for="rrItem">What do you need?</label><textarea id="rrItem" placeholder="e.g. 200 ft of 18 inch containment boom"></textarea></div>
+    <div class="row">
+      <div class="field"><label for="rrQty">Qty</label><input id="rrQty" inputmode="numeric" value="1"></div>
+      <div class="field"><label for="rrUom">Unit</label><input id="rrUom" value="EA"></div>
+    </div>
+    <div class="field"><label>Priority</label>
+      <div class="toggle" id="rrPri"><button type="button" data-val="U">Urgent</button><button type="button" data-val="R" class="active">Routine</button><button type="button" data-val="L">Low</button></div></div>
+    <div class="field"><label for="rrWhere">Deliver to</label><input id="rrWhere" placeholder="Site / division / staging"></div>
+    <div class="field"><label for="rrWhen">Needed by</label><input id="rrWhen" placeholder="e.g. tomorrow 0700"></div>
+    <div class="field"><label for="rrNotes">Notes</label><textarea id="rrNotes"></textarea></div>
+    <div class="row">
+      <div class="field"><label for="rrName">Requested by</label><input id="rrName" placeholder="Your name"></div>
+      <div class="field"><label for="rrPos">Position</label><input id="rrPos" placeholder="e.g. TF Leader"></div>
+    </div>
+    <button class="btn btn-save wide" id="rrSave" type="button">Save request</button>
+    <div class="sub-title">My requests on this phone</div>
+    <div id="rrList"></div>
+  </main>
+
+  <!-- Disembark dialog -->
+  <div class="overlay hidden" id="disOverlay">
+    <div class="box">
+      <div class="box-title" id="disTitle">Disembark</div>
+      <label>Injured?</label>
+      <div class="toggle" id="disInj"><button type="button" data-val="No" class="active">No</button><button type="button" data-val="Yes">Yes</button></div>
+      <div class="field hidden" id="disDescBox"><label for="disDesc">Injury description</label><textarea id="disDesc"></textarea>
+        <label class="check"><input type="checkbox" id="disCapt"> Captain notified</label></div>
+      <div class="row"><button class="btn btn-back" id="disCancel" type="button">Cancel</button><button class="btn btn-next" id="disOk" type="button">Disembark</button></div>
+    </div>
+  </div>
+
   <nav class="nav">
     <button class="btn btn-back hidden" id="backBtn" type="button">Back</button>
     <button class="btn btn-next" id="nextBtn" type="button">Next</button>
@@ -114,7 +218,7 @@
   <!-- Saved -->
   <div class="overlay hidden" id="savedOverlay">
     <div class="box box-wide">
-      <div class="box-title">Saved points <button class="link right" id="savedClose" type="button">Close</button></div>
+      <div class="box-title">Saved on this phone <button class="link right" id="savedClose" type="button">Close</button></div>
       <div class="hint" id="savedHint"></div>
       <div id="savedList"></div>
       <button class="btn btn-ghost" id="sendNowBtn" type="button">Upload now</button>
@@ -134,11 +238,13 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-26-1"></script>
-  <script src="js/store.js?v=2026-10-26-1"></script>
-  <script src="js/api.js?v=2026-10-26-1"></script>
-  <script src="js/outbox.js?v=2026-10-26-1"></script>
-  <script src="js/app.js?v=2026-10-26-1"></script>
+  <script src="js/config.js?v=2026-10-26-2"></script>
+  <script src="js/store.js?v=2026-10-26-2"></script>
+  <script src="js/api.js?v=2026-10-26-2"></script>
+  <script src="js/outbox.js?v=2026-10-26-2"></script>
+  <script src="js/forms.js?v=2026-10-26-2"></script>
+  <script src="js/app.js?v=2026-10-26-2"></script>
+  <script src="js/forms-ui.js?v=2026-10-26-2"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
