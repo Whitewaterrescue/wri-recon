@@ -104,3 +104,16 @@ textarea { min-height: 96px; resize: vertical; }
 .aboard { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; font-size: 14px; }
 .aboard .n { flex: 1; } .aboard .o { color: var(--muted); font-size: 12px; }
 .aboard button { padding: 8px 12px; font-size: 13px; }
+/* Drone tab */
+.dgroup { background: var(--panel); border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+.dgroup > .t { font-weight: 600; font-size: 14px; }
+.dgroup .s { margin-top: 8px; } .dgroup .s.green { color: #8fe3b0; } .dgroup .s.red { color: #ff9a9d; }
+.dthumbs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 8px; }
+.dth { position: relative; aspect-ratio: 4 / 3; border: 2px solid transparent; border-radius: 5px; overflow: hidden; padding: 0; background: #1f2121; color: var(--muted); font-size: 10px; }
+.dth img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dth.off { opacity: .3; border-color: var(--line); }
+.dth.off::after { content: '\2715'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; }
+.dacts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.dacts .btn { flex: 1; padding: 10px 12px; font-size: 14px; }
+.dlist { display: flex; flex-direction: column; gap: 6px; }
+.dlist .item { background: var(--card); }

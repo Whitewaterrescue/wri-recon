@@ -48,7 +48,7 @@
       record.photo_count = photos.length;
       var puts = photos.map(function (p, i) {
         return Store.put('photos', { key: record.recon_id + '/' + i, recon_id: record.recon_id, idx: i, name: p.name || '',
-                                     blob: p.blob, size: p.blob.size, status: 'queued' });
+                                     blob: p.blob, size: p.blob.size, status: 'queued', meta: p.meta || '' });
       });
       return Promise.all(puts).then(function () { return Store.put('records', record); })
         .then(function () { emit(); setTimeout(Outbox.drain, 50); });
@@ -194,7 +194,39 @@
     });
   }
 
+  /**
+   * Drone photos filed onto an EXISTING recon point (Drone tab): one 'attach' per photo,
+   * idempotent by file name on the server. fields: {target_recon_id, target_oid, target_label, reporter_name}
+   */
+  function sendAttach(r, pin, device) {
+    var f = r.fields || {};
+    return Store.photosFor(r.recon_id).then(function (ps) {
+      return ps.reduce(function (p, ph) {
+        return p.then(function () {
+          if (ph.status !== 'queued' || !ph.blob) return;
+          return blobToBase64(ph.blob).then(function (b64) {
+            return Api.post('attach', { pin: pin, device: device, target_recon_id: f.target_recon_id || '', target_oid: f.target_oid,
+                                        name: ph.name, base64: b64, meta: ph.meta || '', reporter_name: f.reporter_name || '' },
+                            uploadTimeout(ph.size || b64.length));
+          }).then(function () {
+            ph.status = 'sent'; ph.blob = null; ph.last_error = '';
+            return Store.put('photos', ph).then(emit);
+          }, function (e) {
+            if (!e.permanent) throw e;
+            ph.status = 'failed'; ph.last_error = e.message;
+            return Store.put('photos', ph).then(emit);
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () { return Store.photosFor(r.recon_id); }).then(function (ps) {
+      r.photos_failed = ps.filter(function (p) { return p.status === 'failed'; }).length;
+      r.status = 'sent'; r.sent_at = Date.now(); r.last_error = '';
+      return Store.put('records', r);
+    });
+  }
+
   function sendRecord(r, pin, device) {
+    if (r.kind === 'dattach') return sendAttach(r, pin, device);
     var kind = r.kind && r.kind !== 'recon' && g.FORM_KINDS && g.FORM_KINDS[r.kind];
     if (r.kind && r.kind !== 'recon') {
       if (!kind) return Promise.reject(Object.assign(new Error('This app version can’t send ' + r.kind + ' records — reload'), { permanent: true, code: 'bad_request' }));
@@ -211,7 +243,7 @@
         return p.then(function () {
           if (ph.status !== 'queued' || !ph.blob) return;
           return blobToBase64(ph.blob).then(function (b64) {
-            return Api.post('photo', { pin: pin, device: device, recon_id: r.recon_id, idx: ph.idx, name: ph.name, base64: b64 },
+            return Api.post('photo', { pin: pin, device: device, recon_id: r.recon_id, idx: ph.idx, name: ph.name, base64: b64, meta: ph.meta || '' },
                             uploadTimeout(ph.size || b64.length));
           }).then(function () {
             ph.status = 'sent'; ph.blob = null; ph.last_error = '';

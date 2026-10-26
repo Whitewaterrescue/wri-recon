@@ -8,10 +8,16 @@ var CONFIG = {
   VESSEL_API: 'https://script.google.com/macros/s/AKfycbwRI7OYT1XKz6_u7fGq-4OYLPCcxxaWGAyNYSxvx7K_u_Z7nNB_PUh5uPuiZy59vNIj/exec',
   // Tabs shown. HASP sign-off and the vessel manifest are built (forms-ui.js, server APIs
   // live) but switched off 2026-10-26 per Cody; add 'hasp' / 'vessel' back here to show them.
-  TABS: ['recon', '214', 'rr'],
+  TABS: ['recon', 'drone', '214', 'rr'],
   MAX_PHOTOS: 10,          // per point (phone storage; the classic page allows 20)
   PHOTO_EDGE: 1600,        // px, longest edge after downscale
   PHOTO_QUALITY: 0.8,      // JPEG
+  // Drone tab: SD-card photos filed onto recon points (2026-10-26)
+  DRONE_MAX_BATCH: 200,    // photos read per pick (only the ~128 KB header of each is read)
+  DRONE_PER_POINT: 20,     // photos on a NEW point started from drone photos (server cap 20)
+  DRONE_EDGE: 2048,        // px: drone frames keep more detail than phone shots
+  DRONE_QUALITY: 0.8,      // ~1 MB per M4T frame at 2048 px
+  DRONE_RADIUS_M: 150,     // nearby recon points searched around a group (wider: 500)
   CATEGORIES: ['Response Actions', 'Observations', 'Safety'],
   AFFILIATIONS: ['Responsible Party', 'Agency', 'Contractor', 'Private Citizen', 'Other'],
   // satellite tiles for the online pin map (public, no key)

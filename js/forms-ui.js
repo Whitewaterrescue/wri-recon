@@ -9,7 +9,7 @@
   var A, $, S;
   var cfg = { hasp: null, vessel: null };
   var view = 'recon', trip = null, openHasp = null, sig = { drawing: false, has: false };
-  var TITLES = { recon: 'Recon', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request' };
+  var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request' };
 
   function staff() {
     var a = (S.cfg && S.cfg.staff) || [], b = (cfg.hasp && cfg.hasp.staff) || [], c = (cfg.vessel && cfg.vessel.staff) || [];
@@ -71,6 +71,7 @@
     if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || ''; renderMine('rr', $('rrList')); }
     if (view === 'hasp') renderHasp();
     if (view === 'vessel') renderVessel();
+    if (view === 'drone' && window.DroneUI) window.DroneUI.render();
   }
 
   // ---------- cached lists ----------
@@ -314,5 +315,6 @@
     window.addEventListener('online', refreshCfg);
     showView((location.hash || '').replace('#', '') || 'recon');
   }
+  window.WRIForms = { showView: function (v) { showView(v); } };
   document.addEventListener('DOMContentLoaded', boot);
 })();

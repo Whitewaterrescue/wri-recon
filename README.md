@@ -17,3 +17,18 @@ signal only needs to carry one photo at a time.
   `index.html` together.
 - Cache Storage is shared by every app on whitewaterrescue.github.io: the service worker only deletes caches
   named `wri-recon-*`.
+
+## Drone tab (2026-10-26)
+
+SD-card drone photos onto recon points. **Choose drone photos → Browse → the card → DCIM.** Only the first
+128 KB of each file is read (`js/dronemeta.js`): DJI XMP (aircraft GPS, the **laser-rangefinder target**
+`LRFTargetLat/Lon` on M4T/M30T, altitude, gimbal, model) with EXIF GPS as the fallback, and the EXIF
+preview for the thumbnail, so a 100-photo card lists in about a second. Photos are grouped (≤ 60 s and
+≤ 75 m apart). Each group is placed at the rangefinder target when it measured one, else the aircraft;
+there is no computed angle/altitude projection.
+
+Per group: **Find nearby points** (needs signal; Recon API `nearby`, 150 m, then 500 m) → **Attach N photos
+here** (queued as a `dattach` record; the outbox sends one `attach` per photo), or **New point here**
+(the Recon form with location, time and up to 20 photos filled in), or **Skip**. Photos are downscaled to
+2048 px / q0.8 one at a time; the metadata rides along as the attachment's keywords.
+Test: the headless rig in the build session (stubbed API, real DJI frames) passed 19/19.

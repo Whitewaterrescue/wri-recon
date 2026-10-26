@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26-6">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26-7">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -21,6 +21,7 @@
   </header>
   <nav class="tabs" id="tabs">
     <button type="button" data-view="recon" class="active">Recon</button>
+    <button type="button" data-view="drone">Drone</button>
     <button type="button" data-view="214">214 Log</button>
     <button type="button" data-view="hasp">HASP</button>
     <button type="button" data-view="vessel">Vessel</button>
@@ -89,7 +90,8 @@
         <button class="btn btn-ghost" type="button" id="galBtn">🖼️ Add Photos</button>
       </div>
       <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
-      <input type="file" id="galInput" accept="image/*" multiple hidden>
+      <!-- no accept=: on iOS it hides Browse, so a drone card / Files can't be reached -->
+      <input type="file" id="galInput" multiple hidden>
       <div class="hint center" id="photoCount">0 photos</div>
       <div class="photo-grid" id="photoGrid"></div>
     </section>
@@ -100,6 +102,18 @@
       <div class="review" id="review"></div>
       <div class="hint">Saving puts the point on this phone first. It uploads by itself whenever there's signal.</div>
     </section>
+  </main>
+
+  <!-- Drone photos -> recon points -->
+  <main class="view hidden" data-view="drone">
+    <div class="step-title">Drone photos &rarr; recon points</div>
+    <div class="hint">Card in the phone (or the drone plugged in): <b>Choose drone photos</b> &rarr; <b>Browse</b> &rarr; the card &rarr; DCIM &rarr; pick the photos (tap &hellip; &rarr; Select for many). Photos taken together are grouped by time and place; attach each group to a recon point nearby, or start a new point there.</div>
+    <button class="btn btn-next wide" id="dPick" type="button">Choose drone photos</button>
+    <!-- no accept=: on iOS it hides Browse; non-JPEGs are filtered in js -->
+    <input type="file" id="dInput" multiple hidden>
+    <div class="hint center" id="dStatus"></div>
+    <div id="dGroups"></div>
+    <button class="link hidden" id="dClear" type="button">Clear list</button>
   </main>
 
   <!-- ICS 214 -->
@@ -243,13 +257,15 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-26-6"></script>
-  <script src="js/store.js?v=2026-10-26-6"></script>
-  <script src="js/api.js?v=2026-10-26-6"></script>
-  <script src="js/outbox.js?v=2026-10-26-6"></script>
-  <script src="js/forms.js?v=2026-10-26-6"></script>
-  <script src="js/app.js?v=2026-10-26-6"></script>
-  <script src="js/forms-ui.js?v=2026-10-26-6"></script>
+  <script src="js/config.js?v=2026-10-26-7"></script>
+  <script src="js/store.js?v=2026-10-26-7"></script>
+  <script src="js/api.js?v=2026-10-26-7"></script>
+  <script src="js/outbox.js?v=2026-10-26-7"></script>
+  <script src="js/forms.js?v=2026-10-26-7"></script>
+  <script src="js/app.js?v=2026-10-26-7"></script>
+  <script src="js/forms-ui.js?v=2026-10-26-7"></script>
+  <script src="js/dronemeta.js?v=2026-10-26-7"></script>
+  <script src="js/drone-ui.js?v=2026-10-26-7"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

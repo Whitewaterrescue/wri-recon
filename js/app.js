@@ -12,7 +12,8 @@
   var S = {
     step: 1, cfg: null, incident: null, lat: null, lon: null, acc: null,
     isWri: 'yes', cat: CONFIG.CATEGORIES[0], type: null, sub: null,
-    photos: []   // [{blob, name, url}]
+    photos: [],   // [{blob, name, url, meta?}]
+    maxPhotos: CONFIG.MAX_PHOTOS, droneGroup: null   // a point started from the Drone tab holds up to DRONE_PER_POINT
   };
   var map = null, marker = null;
 
@@ -189,8 +190,8 @@
   }
   function addPhotos(input) {
     var files = [].slice.call(input.files || []); input.value = '';
-    var room = CONFIG.MAX_PHOTOS - S.photos.length;
-    if (files.length > room) toast('Up to ' + CONFIG.MAX_PHOTOS + ' photos per point. Save another point for more.');
+    var room = S.maxPhotos - S.photos.length;
+    if (files.length > room) toast('Up to ' + S.maxPhotos + ' photos per point. Save another point for more.');
     files.slice(0, Math.max(0, room)).reduce(function (p, f) {
       return p.then(function () { return downscale(f); }).then(function (blob) {
         S.photos.push({ blob: blob, name: f.name || 'photo.jpg', url: URL.createObjectURL(blob) }); renderPhotos();
@@ -198,7 +199,7 @@
     }, Promise.resolve());
   }
   function renderPhotos() {
-    $('photoCount').textContent = S.photos.length + ' / ' + CONFIG.MAX_PHOTOS + ' photos';
+    $('photoCount').textContent = S.photos.length + ' / ' + S.maxPhotos + ' photos';
     $('photoGrid').innerHTML = S.photos.map(function (p, i) {
       return '<div class="ph"><img src="' + p.url + '" alt=""><button type="button" class="rm" data-i="' + i + '">×</button></div>';
     }).join('');
@@ -256,8 +257,10 @@
       }
     };
     if (S.isWri === 'yes') lsSet('wri_recon_name', reporterName());
-    Outbox.enqueue(rec, S.photos.map(function (p) { return { blob: p.blob, name: p.name }; })).then(function () {
+    var droneGroup = S.droneGroup;
+    Outbox.enqueue(rec, S.photos.map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta || '' }; })).then(function () {
       busy(b, false);
+      if (droneGroup) window.dispatchEvent(new CustomEvent('recon:saved', { detail: { recon_id: rec.recon_id, drone_group: droneGroup } }));
       $('doneTitle').textContent = 'Saved on this phone';
       $('doneSub').textContent = navigator.onLine ? 'Uploading now…' : 'No signal: it uploads by itself when you’re back in coverage. Open Recon then.';
       $('doneOverlay').classList.remove('hidden');
@@ -270,6 +273,7 @@
     $('doneOverlay').classList.add('hidden');
     S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
     S.photos = []; S.type = null; S.sub = null; S.lat = null; S.lon = null; S.acc = null;
+    S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null;
     $('desc').value = ''; $('tfName').value = ''; $('tfStatus').value = ''; $('lat').value = ''; $('lon').value = '';
     $('coords').textContent = 'No location yet'; $('gpsBtn').textContent = 'Use My Location'; $('gpsBtn').classList.remove('ok');
     if (marker && map) { map.removeLayer(marker); marker = null; }
@@ -363,6 +367,7 @@
     if (r.kind === 'rr') return 'Request: ' + String(f.item || '').slice(0, 60);
     if (r.kind === 'hasp') return 'HASP sign-off: ' + (f.employeeName || '');
     if (r.kind === 'vessel') return 'Vessel ' + f.step + ': ' + (f.passenger_name || f.vessel || '');
+    if (r.kind === 'dattach') return 'Drone photos → ' + (f.target_label || 'recon point');
     return r.kind;
   }
 
@@ -440,7 +445,23 @@
     });
     refreshStatus();
   }
-  window.WRIApp = { S: S, $: $, esc: esc, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
+  /**
+   * Start a new point from a group of drone photos (Drone tab): location, time and photos
+   * filled in, then the crew picks the type and saves as usual. photos: [{blob, name, meta}]
+   */
+  function prefillFromDrone(o) {
+    S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+    S.maxPhotos = CONFIG.DRONE_PER_POINT; S.droneGroup = o.groupId;
+    S.photos = o.photos.slice(0, S.maxPhotos).map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta, url: URL.createObjectURL(p.blob) }; });
+    S.lat = null; S.lon = null; S.acc = null;
+    if (marker && map) { map.removeLayer(marker); marker = null; }
+    if (o.lat != null) { setLoc(o.lat, o.lon, null, 'drone'); $('coords').textContent += '  (from the drone photos: tap the map to move it)'; }
+    else { $('coords').textContent = 'No location in these photos: tap the map, use GPS or type it'; $('lat').value = ''; $('lon').value = ''; }
+    if (o.when) { var d = new Date(o.when); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('obsTime').value = d.toISOString().slice(0, 16); }
+    renderPhotos(); go(1);
+  }
+
+  window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
     askPin: function (m) { askPin(m); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
   document.addEventListener('DOMContentLoaded', boot);
