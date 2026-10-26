@@ -36,7 +36,8 @@
     }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message, 8000); });
   }
   function statusLine(r) {
-    if (r.status === 'sent') return '<span class="s green">Uploaded' + (r.result && r.result.request_id ? ' as ' + A.esc(r.result.request_id) : '') + '</span>';
+    if (r.status === 'sent') return '<span class="s green">Uploaded' + (r.result && r.result.request_id ? ' as ' + A.esc(r.result.request_id) : '') +
+      (r.result && r.result.section ? ' to the ' + A.esc(r.result.section) + ' log' : '') + '</span>';
     if (r.status === 'needs_pin') return '<span class="s red">Waiting for the incident PIN</span>';
     if (r.status === 'failed') return '<span class="s red">' + A.esc(r.last_error || 'Could not upload') + '</span>';
     return '<span class="s amber">Waiting to upload' + (r.last_error ? ' (' + A.esc(r.last_error) + ')' : '') + '</span>';
@@ -89,10 +90,10 @@
     var who = pickedName($('l214Name'), $('l214Other')), act = $('l214Act').value.trim();
     if (!who) return A.toast('Pick your name.');
     if (!act) return A.toast('Write the activity.');
-    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim());
+    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
     save({ recon_id: A.uuid(), kind: '214', incident: S.incident,
-           fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: $('l214Unit').checked } },
+           fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: $('l214Unit').checked, section: $('l214Sec').value } },
       $('l214Save'), '214 note saved.', function () { $('l214Act').value = ''; $('l214Time').value = A.localNow(); renderMine('214', $('l214List')); });
   }
 
@@ -271,7 +272,7 @@
   function boot() {
     A = window.WRIApp; $ = A.$; S = A.S;
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
-    $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
+    $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); });
     $('l214Save').addEventListener('click', save214);
     $('rrPri').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('rrPri', b.dataset.val); });

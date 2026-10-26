@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26-4">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26-5">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -107,6 +107,11 @@
     <div class="step-title">ICS 214 Activity Log</div>
     <div class="field"><label for="l214Name">Your name</label><select id="l214Name"></select></div>
     <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
+    <div class="field"><label for="l214Sec">Unit log</label><select id="l214Sec">
+      <option value="">Auto (from the work chart)</option><option value="command">Command</option>
+      <option value="operations">Operations</option><option value="planning">Planning</option>
+      <option value="logistics">Logistics</option><option value="finance">Finance</option><option value="safety">Safety</option>
+    </select><div class="hint">Auto files it to your section on the incident work chart.</div></div>
     <div class="field"><label for="l214Pos">ICS position (optional)</label><input id="l214Pos" placeholder="e.g. Div A Supervisor"></div>
     <div class="field"><label for="l214Time">When</label><input type="datetime-local" id="l214Time"></div>
     <div class="field"><label for="l214Act">Activity</label><textarea id="l214Act" placeholder="What happened / what you did"></textarea></div>
@@ -238,13 +243,13 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-26-4"></script>
-  <script src="js/store.js?v=2026-10-26-4"></script>
-  <script src="js/api.js?v=2026-10-26-4"></script>
-  <script src="js/outbox.js?v=2026-10-26-4"></script>
-  <script src="js/forms.js?v=2026-10-26-4"></script>
-  <script src="js/app.js?v=2026-10-26-4"></script>
-  <script src="js/forms-ui.js?v=2026-10-26-4"></script>
+  <script src="js/config.js?v=2026-10-26-5"></script>
+  <script src="js/store.js?v=2026-10-26-5"></script>
+  <script src="js/api.js?v=2026-10-26-5"></script>
+  <script src="js/outbox.js?v=2026-10-26-5"></script>
+  <script src="js/forms.js?v=2026-10-26-5"></script>
+  <script src="js/app.js?v=2026-10-26-5"></script>
+  <script src="js/forms-ui.js?v=2026-10-26-5"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
