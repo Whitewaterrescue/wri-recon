@@ -1,7 +1,7 @@
 {
   "name": "WRI Field Forms (offline)",
   "short_name": "WRI Forms",
-  "description": "Recon, ICS 214 notes, HASP sign-off, vessel manifest and resource requests for WRI incidents. Works without signal; uploads when you're back in coverage.",
+  "description": "Recon, ICS 214 notes and resource requests for WRI incidents. Works without signal; uploads when you're back in coverage.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

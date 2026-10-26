@@ -52,8 +52,9 @@
   }
 
   // ---------- tabs ----------
+  function tabOn(v) { return !CONFIG.TABS || CONFIG.TABS.indexOf(v) >= 0; }
   function showView(v) {
-    if (!TITLES[v]) v = 'recon';
+    if (!TITLES[v] || !tabOn(v)) v = 'recon';
     view = v;
     [].forEach.call($('tabs').children, function (b) { b.classList.toggle('active', b.dataset.view === v); });
     [].forEach.call(document.querySelectorAll('.view'), function (m) { m.classList.toggle('hidden', m.dataset.view !== v); });
@@ -303,12 +304,13 @@
     window.addEventListener('outbox:changed', function () { if (view === '214') renderMine('214', $('l214List')); if (view === 'rr') renderMine('rr', $('rrList')); });
 
     Store.kvGet('vessel_trip').then(function (t) { trip = t || null; render(); });
-    loadCfg('hasp', CONFIG.HASP_API + '?page=api&action=offline_config');
-    loadCfg('vessel', CONFIG.VESSEL_API + '?page=api&action=offline_config');
-    window.addEventListener('online', function () {
-      loadCfg('hasp', CONFIG.HASP_API + '?page=api&action=offline_config');
-      loadCfg('vessel', CONFIG.VESSEL_API + '?page=api&action=offline_config');
-    });
+    [].forEach.call($('tabs').children, function (b) { b.classList.toggle('hidden', !tabOn(b.dataset.view)); });
+    var refreshCfg = function () {
+      if (tabOn('hasp')) loadCfg('hasp', CONFIG.HASP_API + '?page=api&action=offline_config');
+      if (tabOn('vessel')) loadCfg('vessel', CONFIG.VESSEL_API + '?page=api&action=offline_config');
+    };
+    refreshCfg();
+    window.addEventListener('online', refreshCfg);
     showView((location.hash || '').replace('#', '') || 'recon');
   }
   document.addEventListener('DOMContentLoaded', boot);
