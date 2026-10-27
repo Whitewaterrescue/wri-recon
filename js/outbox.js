@@ -119,13 +119,36 @@
       }).then(function () { return Store.del('records', reconId); }).then(emit);
     },
 
-    /** New PIN: every needs_pin record goes back in the queue. */
-    setPin: function (pin) {
-      return Store.kvSet('pin', String(pin || '').trim()).then(function () { return Store.all('records'); }).then(function (rs) {
-        return Promise.all((rs || []).filter(function (r) { return r.status === 'needs_pin'; }).map(function (r) {
+    /** New PIN for an incident (each open incident has its own Gateway PIN): that
+     *  incident's needs_pin records go back in the queue. No incident = the old
+     *  single PIN, used for any incident without its own. */
+    setPin: function (pin, incidentId) {
+      pin = String(pin || '').trim();
+      var save = incidentId
+        ? Store.kvGet('pins').then(function (m) { m = m || {}; m[String(incidentId)] = pin; return Store.kvSet('pins', m); })
+        : Store.kvSet('pin', pin);
+      return save.then(function () { return Store.all('records'); }).then(function (rs) {
+        return Promise.all((rs || []).filter(function (r) {
+          return r.status === 'needs_pin' && (!incidentId || recInc(r) === String(incidentId));
+        }).map(function (r) {
           r.status = 'queued'; r.next_try = 0; return Store.put('records', r);
         }));
       }).then(function () { emit(); return Outbox.drain(); });
+    },
+
+    /** The PIN saved for an incident ('' = none yet). */
+    pinFor: function (incidentId) {
+      return Promise.all([Store.kvGet('pins'), Store.kvGet('pin')]).then(function (a) {
+        return String(((a[0] || {})[String(incidentId || '')]) || a[1] || '');
+      });
+    },
+
+    /** The incident of the first record waiting for a PIN (the banner asks for that one). */
+    needsPinIncident: function () {
+      return Store.all('records').then(function (rs) {
+        var r = (rs || []).filter(function (x) { return x.status === 'needs_pin'; })[0];
+        return r ? (r.incident || null) : null;
+      });
     },
 
     prune: function () {
@@ -137,32 +160,37 @@
     }
   };
 
+  function recInc(r) { return String((r && r.incident && r.incident.incident_id) || ''); }
+
   function drainOnce() {
     if (running) return Promise.resolve();
     running = true;
-    var pin, device, stop = false;
-    return Promise.all([Store.kvGet('pin'), Store.deviceId(), Store.all('records')]).then(function (a) {
-      pin = a[0]; device = a[1];
-      var due = (a[2] || []).filter(function (r) { return r.status === 'queued'; })
+    var pins, legacyPin, device, stop = false, badInc = {};
+    var pinOf = function (r) { return String(pins[recInc(r)] || legacyPin || ''); };
+    return Promise.all([Store.kvGet('pins'), Store.kvGet('pin'), Store.deviceId(), Store.all('records')]).then(function (a) {
+      pins = a[0] || {}; legacyPin = a[1] || ''; device = a[2];
+      var due = (a[3] || []).filter(function (r) { return r.status === 'queued'; })
         .sort(function (x, y) { return x.created_at - y.created_at; });
       if (!due.length) return;
-      if (!pin) {   // nothing can go without the PIN: park them where the UI asks for it
-        return Promise.all(due.map(function (r) { r.status = 'needs_pin'; return Store.put('records', r); }));
-      }
+      // nothing can go without its incident's PIN: park those where the UI asks for it
+      var parked = due.filter(function (r) { return !pinOf(r); });
+      due = due.filter(function (r) { return !!pinOf(r); });
+      var park = Promise.all(parked.map(function (r) { r.status = 'needs_pin'; return Store.put('records', r); }));
+      if (!due.length) return park;
       // A vessel trip's steps must land in order (board before disembark before return):
       // once one step of a trip fails, the rest of that trip waits for the next drain.
       var blockedTrip = {};
       var tripOf = function (r) { return r.kind === 'vessel' && r.fields ? r.fields.trip_key : ''; };
       return due.reduce(function (p, r) {
         return p.then(function () {
-          if (stop || (r.next_try || 0) > Date.now()) { if (tripOf(r)) blockedTrip[tripOf(r)] = 1; return; }
+          if (stop || badInc[recInc(r)] || (r.next_try || 0) > Date.now()) { if (tripOf(r)) blockedTrip[tripOf(r)] = 1; return; }
           if (tripOf(r) && blockedTrip[tripOf(r)]) return;
-          return sendRecord(r, pin, device).catch(function (e) {
+          return sendRecord(r, pinOf(r), device).catch(function (e) {
             if (tripOf(r)) blockedTrip[tripOf(r)] = 1;
-            if (e.code === 'pin_invalid') {
-              stop = true;
+            if (e.code === 'pin_invalid') {   // wrong PIN for THIS incident: its records wait; others still go
+              var inc = recInc(r); badInc[inc] = 1;
               return Store.all('records').then(function (rs) {
-                return Promise.all(rs.filter(function (x) { return x.status === 'queued'; }).map(function (x) {
+                return Promise.all(rs.filter(function (x) { return x.status === 'queued' && recInc(x) === inc; }).map(function (x) {
                   x.status = 'needs_pin'; x.last_error = e.message; return Store.put('records', x);
                 }));
               });
@@ -174,7 +202,7 @@
             return Store.put('records', r);
           }).then(emit);
         });
-      }, Promise.resolve());
+      }, park);
     }).then(function () { return Outbox.prune(); })
       .catch(function (e) { try { console.warn('drain', e); } catch (x) {} })
       .then(function () { running = false; emit(); });
@@ -205,7 +233,7 @@
         return p.then(function () {
           if (ph.status !== 'queued' || !ph.blob) return;
           return blobToBase64(ph.blob).then(function (b64) {
-            return Api.post('attach', { pin: pin, device: device, target_recon_id: f.target_recon_id || '', target_oid: f.target_oid,
+            return Api.post('attach', { pin: pin, device: device, incident_id: recInc(r), target_recon_id: f.target_recon_id || '', target_oid: f.target_oid,
                                         name: ph.name, base64: b64, meta: ph.meta || '', reporter_name: f.reporter_name || '' },
                             uploadTimeout(ph.size || b64.length));
           }).then(function () {
@@ -243,7 +271,7 @@
         return p.then(function () {
           if (ph.status !== 'queued' || !ph.blob) return;
           return blobToBase64(ph.blob).then(function (b64) {
-            return Api.post('photo', { pin: pin, device: device, recon_id: r.recon_id, idx: ph.idx, name: ph.name, base64: b64, meta: ph.meta || '' },
+            return Api.post('photo', { pin: pin, device: device, incident_id: recInc(r), recon_id: r.recon_id, idx: ph.idx, name: ph.name, base64: b64, meta: ph.meta || '' },
                             uploadTimeout(ph.size || b64.length));
           }).then(function () {
             ph.status = 'sent'; ph.blob = null; ph.last_error = '';
