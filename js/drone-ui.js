@@ -77,7 +77,7 @@
   }
 
   function render() {
-    if (!$('dGroups')) return;
+    if (!$ || !$('dGroups')) return;   // opened on #drone: tabs render before boot(); boot renders
     $('dClear').classList.toggle('hidden', !D.items.length);
     var html = D.groups.map(function (g, gi) {
       var st = D.state[g.id] || {}, sel = selected(g), c = DroneMeta.centroid(sel.length ? sel : g.items);
