@@ -241,21 +241,57 @@
     });
   }
 
-  /** Downscale the selected photos one at a time (a full frame decode each; two at once can kill an iPhone tab). */
+  /** Downscale the selected photos one at a time (a full frame decode each; two at once can kill an iPhone tab).
+   *  Resolves to the photos that made it; `out.failed` says why the others didn't (shown to the crew). */
   function prepare(items, btn) {
     var out = [], i = 0;
+    out.failed = [];
+    var refreshed = false;
     return items.reduce(function (p, it) {
       return p.then(function () {
         i++; if (btn) btn.innerHTML = '<span class="spin"></span>Preparing ' + i + ' / ' + items.length + '…';
-        var src = it.file ? Promise.resolve(it.file) : fetch(it.cloud.url).then(function (r) {
-          if (!r.ok) throw new Error(r.status === 403 ? 'link expired: tap From the drone again' : 'HTTP ' + r.status);
-          return r.blob();
-        });
+        var src = it.file ? Promise.resolve(it.file) : cloudBlob(it, items, function () { var r = refreshed; refreshed = true; return r; });
         return src.then(downscale).then(function (blob) {
-          out.push({ blob: blob, name: it.name, meta: DroneMeta.keywords(it.meta, it.name, it.cloud ? 'api' : 'sd') });
-        }, function (e) { A.toast('Could not read ' + it.name + '; left out' + (it.cloud && e && e.message ? ' (' + e.message + ')' : '') + '.', 6000); });
+          out.push({ blob: blob, name: it.name, item: it, meta: DroneMeta.keywords(it.meta, it.name, it.cloud ? 'api' : 'sd') });
+        }, function (e) { out.failed.push(it.name + ': ' + ((e && e.message) || 'unreadable')); });
       });
     }, Promise.resolve()).then(function () { return out; });
+  }
+  function failText(photos) {
+    var f = photos.failed || [];
+    return f.length ? f.length + ' photo' + (f.length === 1 ? '' : 's') + ' could not be downloaded (' + f[0].replace(/^[^:]*: /, '') + ')' : '';
+  }
+
+  /** A drone upload's full original from R2. Phone signal drops mid-download (5G at the site):
+   *  3 tries with a timeout; a refused link (expired / 403) gets fresh links for the whole batch once. */
+  function cloudBlob(it, batch, alreadyRefreshed) {
+    var tries = 0;
+    function once() {
+      tries++;
+      var ctl = window.AbortController ? new AbortController() : null;
+      var timer = ctl && setTimeout(function () { ctl.abort(); }, 90000);
+      return fetch(it.cloud.url, ctl ? { signal: ctl.signal } : {}).then(function (r) {
+        if (timer) clearTimeout(timer);
+        if (!r.ok) throw Object.assign(new Error(r.status === 403 ? 'link expired' : 'HTTP ' + r.status), { status: r.status });
+        return r.blob();
+      }, function (e) {
+        if (timer) clearTimeout(timer);
+        throw new Error(e && e.name === 'AbortError' ? 'download timed out (weak signal)' : 'no connection to the drone cloud storage');
+      }).catch(function (e) {
+        if (tries >= 3) throw e;
+        var fresh = (e.status === 403 || e.status === 400) && !alreadyRefreshed() ? refreshLinks(batch) : Promise.resolve();
+        return fresh.then(function () { return new Promise(function (r) { setTimeout(r, tries * 2500); }); }).then(once);
+      });
+    }
+    return once();
+  }
+  /** New signed links for these uploads (the list may have been loaded hours ago). */
+  function refreshLinks(batch) {
+    var ids = batch.filter(function (x) { return x.cloud; }).map(function (x) { return x.cloud.id; });
+    if (!ids.length || !S.incident) return Promise.resolve();
+    return auth().then(function (a) { return cloudPost('/api/inbox', Object.assign(a, { ids: ids })); }).then(function (j) {
+      (j.items || []).forEach(function (x) { batch.forEach(function (it) { if (it.cloud && it.cloud.id === x.id) it.cloud.url = x.url; }); });
+    }, function () {});
   }
   function downscale(file) {
     return new Promise(function (res, rej) {
@@ -278,19 +314,23 @@
     if (!p || !sel.length) { A.toast('Select at least one photo.'); return; }
     var label = typeLabel(p.type) + (p.subtype ? ' — ' + p.subtype : '') + ' (' + p.dist_m + ' m)';
     A.busy(btn, true, 'Preparing…');
+    var done;
     prepare(sel, btn).then(function (photos) {
-      if (!photos.length) throw new Error('No photo could be read.');
+      if (!photos.length) throw Object.assign(new Error((failText(photos) || 'No photo could be read') + '. Nothing was filed: try again with better signal.'), { download: true });
+      done = photos;
       return Outbox.enqueue({
         recon_id: A.uuid(), kind: 'dattach', incident: S.incident,
         fields: { target_recon_id: p.recon_id || '', target_oid: p.oid, target_label: label, reporter_name: A.lsGet('wri_recon_name') || '' }
-      }, photos).then(function () { return photos.length; });
+      }, photos.map(function (x) { return { blob: x.blob, name: x.name, meta: x.meta }; })).then(function () { return photos.length; });
     }).then(function (n) {
       A.busy(btn, false);
-      markCloud(sel, 'filed', label);
+      // only the photos that made it leave the list; a failed download stays to try again
+      markCloud(done.map(function (x) { return x.item; }), 'filed', label);
+      if (done.failed.length) A.toast(failText(done) + '. They stay in the list: try them again with better signal.', 8000);
       D.state[g.id] = { filed: n + ' photo' + (n === 1 ? '' : 's') + ' attached to ' + label + (navigator.onLine ? ' · uploading' : ' · uploads when there’s signal') };
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
       render();
-    }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message, 8000); });
+    }, function (e) { A.busy(btn, false); A.toast(e.download ? e.message : 'Could not save on this phone: ' + e.message, 8000); });
   }
 
   function newPoint(g, btn) {
@@ -302,8 +342,10 @@
     A.busy(btn, true, 'Preparing…');
     prepare(use, btn).then(function (photos) {
       A.busy(btn, false);
-      if (!photos.length) { A.toast('No photo could be read.'); return; }
-      D.newIds[g.id] = use;   // marked filed once the point is saved (recon:saved)
+      if (!photos.length) { A.toast((failText(photos) || 'No photo could be read') + '. Try again with better signal.', 8000); return; }
+      if (photos.failed.length) A.toast(failText(photos) + '; the point gets the other ' + photos.length + '.', 7000);
+      D.newIds[g.id] = photos.map(function (x) { return x.item; });   // marked filed once the point is saved (recon:saved)
+      photos = photos.map(function (x) { return { blob: x.blob, name: x.name, meta: x.meta }; });
       A.prefillFromDrone({ groupId: g.id, lat: c ? c.lat : null, lon: c ? c.lon : null, when: use[0].meta.taken, photos: photos });
       window.WRIForms.showView('recon');
       A.toast('Photos and location filled in. Pick the type and save the point.', 5000);
