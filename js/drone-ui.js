@@ -137,7 +137,7 @@
     D.nearby[g.id] = { loading: true, radius: radius, points: [] };
     if (btn) A.busy(btn, true, 'Searching…');
     render();
-    Promise.all([Store.kvGet('pin'), Store.deviceId()]).then(function (a) {
+    Promise.all([Outbox.pinFor(S.incident && S.incident.incident_id), Store.deviceId()]).then(function (a) {
       if (!a[0]) { A.askPin(); throw Object.assign(new Error('Enter the incident PIN first.'), { code: 'no_pin' }); }
       return Api.post('nearby', { pin: a[0], device: a[1], lat: c.lat, lon: c.lon, radius_m: radius, incident_id: S.incident.incident_id }, 30000);
     }).then(function (d) {

@@ -282,24 +282,35 @@
   }
 
   // ---------- PIN ----------
-  function askPin(msg) {
-    $('pinMsg').textContent = msg || 'Enter the incident PIN. Points upload with it.';
+  // Each open incident has its own Gateway PIN (2026-10-27): the phone keeps one per
+  // incident, and the prompt names the incident it is for.
+  var pinInc = null;   // {incident_id, project_key} the open prompt is for
+  function askPin(msg, inc) {
+    pinInc = inc || S.incident || null;
+    var name = pinInc ? (pinInc.project_key || pinInc.incident_name || pinInc.incident_id) : '';
+    $('pinMsg').textContent = (msg || 'Enter the incident PIN. Points upload with it.') + (name ? ' (' + name + ')' : '');
     $('pinOverlay').classList.remove('hidden'); $('pinInput').value = ''; setTimeout(function () { $('pinInput').focus(); }, 50);
   }
   function submitPin() {
     var pin = $('pinInput').value.trim(), b = $('pinBtn');
     if (!pin) return;
+    var incId = pinInc && pinInc.incident_id ? String(pinInc.incident_id) : '';
     if (!navigator.onLine) {   // can't check it now; it's checked on the first upload
-      Outbox.setPin(pin); $('pinOverlay').classList.add('hidden'); toast('PIN saved. It’s checked when you’re back in signal.'); return;
+      Outbox.setPin(pin, incId); $('pinOverlay').classList.add('hidden'); toast('PIN saved. It’s checked when you’re back in signal.'); return;
     }
     busy(b, true, 'Checking…');
-    Store.deviceId().then(function (device) { return Api.post('pin', { pin: pin, device: device }, 20000); }).then(function () {
-      busy(b, false); $('pinOverlay').classList.add('hidden'); return Outbox.setPin(pin);
+    Store.deviceId().then(function (device) { return Api.post('pin', { pin: pin, device: device, incident_id: incId }, 20000); }).then(function () {
+      busy(b, false); $('pinOverlay').classList.add('hidden'); return Outbox.setPin(pin, incId);
     }, function (e) {
       busy(b, false);
       if (e.code === 'pin_invalid' || e.code === 'pin_locked') { $('pinMsg').textContent = e.message; return; }
-      Outbox.setPin(pin); $('pinOverlay').classList.add('hidden'); toast('Couldn’t check the PIN now; saved, checked on upload.');
+      Outbox.setPin(pin, incId); $('pinOverlay').classList.add('hidden'); toast('Couldn’t check the PIN now; saved, checked on upload.');
     });
+  }
+  /** Ask for the picked incident's PIN when the phone has none for it yet. */
+  function ensurePinForIncident() {
+    if (!S.incident) return;
+    Outbox.pinFor(S.incident.incident_id).then(function (pin) { if (!pin) askPin('Enter the Gateway PIN for this incident.'); });
   }
 
   // ---------- saved list + banner ----------
@@ -418,7 +429,7 @@
       }).then(function () { return Outbox.drain(); }).then(function () { busy(b, false); renderSaved(); refreshStatus(); });
     });
     $('banner').addEventListener('click', function () {
-      if (this.dataset.act === 'pin') askPin('The PIN changed or is wrong. Enter the current incident PIN.');
+      if (this.dataset.act === 'pin') Outbox.needsPinIncident().then(function (inc) { askPin('The PIN changed or is wrong. Enter the current incident PIN.', inc); });
       else { $('savedOverlay').classList.remove('hidden'); renderSaved(); }
     });
 
@@ -439,8 +450,9 @@
     window.addEventListener('focus', kick);
     setInterval(function () { if (document.visibilityState === 'visible') kick(); }, 30000);
 
-    loadConfig().then(function () { return Store.kvGet('pin'); }).then(function (pin) {
-      if (!pin) askPin();
+    loadConfig().then(function () {
+      ensurePinForIncident();
+      window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);
     });
     refreshStatus();
@@ -463,6 +475,6 @@
 
   window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
-    askPin: function (m) { askPin(m); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
+    askPin: function (m, inc) { askPin(m, inc); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
   document.addEventListener('DOMContentLoaded', boot);
 })();
