@@ -9,10 +9,18 @@
  * 3. Everything goes through the outbox like any saved point: downscaled on the phone, kept in
  *    IndexedDB, uploaded one photo per request when there's signal. Attachments carry the photo's
  *    metadata in `keywords` (the downscale strips it from the JPEG).
+ *
+ * "From the drone" (P3, 2026-10-27): photos Pilot 2 auto-uploaded to WRI Drone Cloud after
+ * landing. The server lists the incident's unfiled ones (same incident PIN) with signed R2
+ * links; each photo's header is read with a Range request (the same 128 KB the SD path reads),
+ * so placement / rangefinder / grouping are identical. Once a group is filed the server is
+ * told (marks queue in localStorage until it answers); it archives the original to Dropbox and
+ * then drops it from R2.
  */
 (function () {
   var A, $, S;
-  var D = { items: [], groups: [], scanning: false, nearby: {}, state: {} };
+  var D = { items: [], groups: [], scanning: false, nearby: {}, state: {}, newIds: {} };
+  var MARKS = 'wri_drone_marks';   // [{incident_id, ids, status, target}] waiting for the server
   // state[groupId] = { filed: 'label', status: 'queued'|'sent' } once filed, or { skipped: true }
   var seq = 0;
 
@@ -55,6 +63,89 @@
       }).then(function () { done++; next(); });
     };
     next();
+  }
+
+  // ---------- from WRI Drone Cloud ----------
+  function cloudPost(path, body) {
+    return fetch(CONFIG.DRONE_CLOUD_URL + path, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw Object.assign(new Error(j.message || ('Drone cloud: HTTP ' + r.status)), { code: j.error }); return j; }); });
+  }
+  function auth() {
+    return Promise.all([Outbox.pinFor(S.incident.incident_id), Store.deviceId()]).then(function (a) {
+      if (!a[0]) { A.askPin(); throw Object.assign(new Error('Enter the incident PIN first.'), { code: 'no_pin' }); }
+      return { incident_id: S.incident.incident_id, pin: a[0], device: a[1] };
+    });
+  }
+  function readHead(url) {
+    return fetch(url, { headers: { Range: 'bytes=0-' + (DroneMeta.HEAD_BYTES - 1) } }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (buf) { return new Uint8Array(buf.byteLength > DroneMeta.HEAD_BYTES ? buf.slice(0, DroneMeta.HEAD_BYTES) : buf); });
+  }
+
+  function fromCloud(btn) {
+    if (!S.incident) { A.toast('Pick the incident at the top first.'); return; }
+    if (!navigator.onLine) { A.toast('Loading drone uploads needs signal.'); return; }
+    if (D.scanning) return;
+    D.scanning = true;
+    A.busy(btn, true, 'Checking the drone cloud…');
+    flushMarks();
+    auth().then(function (a) { return cloudPost('/api/inbox', a); }).then(function (j) {
+      var have = {}; D.items.forEach(function (it) { if (it.cloud) have[it.cloud.id] = 1; have[it.name] = 1; });
+      var list = (j.items || []).filter(function (x) { return !have[x.id] && !have[x.name]; });
+      if (!list.length) { $('dStatus').textContent = (j.items || []).length ? 'All drone uploads are already in the list.' : 'No new drone uploads for ' + S.incident.incident_name + '.'; return; }
+      var done = 0;
+      return list.reduce(function (p, x) {
+        return p.then(function () {
+          $('dStatus').textContent = 'Reading drone upload ' + (++done) + ' / ' + list.length + '…';
+          return readHead(x.url).then(function (bytes) {
+            var meta = DroneMeta.parse(bytes, x.name);
+            // header without a fix: fall back to the position Pilot 2 reported
+            if (meta.lat == null && x.lat != null) { meta.lat = x.lat; meta.lon = x.lng; meta.placement = 'drone'; }
+            if (!meta.taken && x.taken) meta.taken = x.taken;
+            var thumb = meta.thumbOff ? URL.createObjectURL(new Blob([bytes.subarray(meta.thumbOff, meta.thumbOff + meta.thumbLen)], { type: 'image/jpeg' })) : null;
+            D.items.push({ id: 'p' + (++seq), cloud: { id: x.id, url: x.url }, file: null, name: x.name, size: 0, meta: meta, thumb: thumb, sel: true });
+          }, function () {
+            D.items.push({ id: 'p' + (++seq), cloud: { id: x.id, url: x.url }, file: null, name: x.name, size: 0, thumb: null, sel: true,
+              meta: { placement: x.lat != null ? 'drone' : 'none', lat: x.lat, lon: x.lng, taken: x.taken, rel_alt: x.rel_alt, yaw: x.yaw } });
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        regroup();
+        var n = D.items.filter(function (it) { return it.cloud; }).length;
+        $('dStatus').textContent = n + ' drone upload' + (n === 1 ? '' : 's') + ' · ' + D.items.length + ' photo' + (D.items.length === 1 ? '' : 's') + ' in ' + D.groups.length + ' group' + (D.groups.length === 1 ? '' : 's');
+      });
+    }).catch(function (e) {
+      if (e.code === 'pin_invalid') A.askPin(e.message);
+      if (e.code !== 'no_pin') A.toast(e.message === 'Failed to fetch' ? 'Could not reach the drone cloud. Check signal.' : e.message, 6000);
+    }).then(function () { D.scanning = false; A.busy(btn, false); render(); });
+  }
+
+  /** Tell the server which uploads were filed; kept until it answers (filing offline is fine). */
+  function readMarks() { try { return JSON.parse(localStorage.getItem(MARKS) || '[]'); } catch (e) { return []; } }
+  function writeMarks(q) { try { localStorage.setItem(MARKS, JSON.stringify(q)); } catch (e) {} }
+  function markCloud(items, status, target) {
+    var ids = items.filter(function (it) { return it.cloud; }).map(function (it) { return it.cloud.id; });
+    if (!ids.length || !S.incident) return;
+    writeMarks(readMarks().concat([{ incident_id: S.incident.incident_id, ids: ids, status: status, target: target || '' }]));
+    flushMarks();
+  }
+  function flushMarks() {
+    var q = readMarks();
+    if (!q.length || !navigator.onLine) return;
+    Store.deviceId().then(function (device) {
+      return q.reduce(function (p, m) {
+        return p.then(function () {
+          return Outbox.pinFor(m.incident_id).then(function (pin) {
+            if (!pin) return;
+            return cloudPost('/api/inbox/mark', { incident_id: m.incident_id, pin: pin, device: device, ids: m.ids, status: m.status, target: m.target }).then(function () {
+              var key = JSON.stringify(m);
+              writeMarks(readMarks().filter(function (x) { return JSON.stringify(x) !== key; }));
+            }, function () {});
+          });
+        });
+      }, Promise.resolve());
+    });
   }
 
   function regroup() {
@@ -156,9 +247,13 @@
     return items.reduce(function (p, it) {
       return p.then(function () {
         i++; if (btn) btn.innerHTML = '<span class="spin"></span>Preparing ' + i + ' / ' + items.length + '…';
-        return downscale(it.file).then(function (blob) {
-          out.push({ blob: blob, name: it.name, meta: DroneMeta.keywords(it.meta, it.name, 'sd') });
-        }, function () { A.toast('Could not read ' + it.name + '; left out.'); });
+        var src = it.file ? Promise.resolve(it.file) : fetch(it.cloud.url).then(function (r) {
+          if (!r.ok) throw new Error(r.status === 403 ? 'link expired: tap From the drone again' : 'HTTP ' + r.status);
+          return r.blob();
+        });
+        return src.then(downscale).then(function (blob) {
+          out.push({ blob: blob, name: it.name, meta: DroneMeta.keywords(it.meta, it.name, it.cloud ? 'api' : 'sd') });
+        }, function (e) { A.toast('Could not read ' + it.name + '; left out' + (it.cloud && e && e.message ? ' (' + e.message + ')' : '') + '.', 6000); });
       });
     }, Promise.resolve()).then(function () { return out; });
   }
@@ -191,6 +286,7 @@
       }, photos).then(function () { return photos.length; });
     }).then(function (n) {
       A.busy(btn, false);
+      markCloud(sel, 'filed', label);
       D.state[g.id] = { filed: n + ' photo' + (n === 1 ? '' : 's') + ' attached to ' + label + (navigator.onLine ? ' · uploading' : ' · uploads when there’s signal') };
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
       render();
@@ -207,6 +303,7 @@
     prepare(use, btn).then(function (photos) {
       A.busy(btn, false);
       if (!photos.length) { A.toast('No photo could be read.'); return; }
+      D.newIds[g.id] = use;   // marked filed once the point is saved (recon:saved)
       A.prefillFromDrone({ groupId: g.id, lat: c ? c.lat : null, lon: c ? c.lon : null, when: use[0].meta.taken, photos: photos });
       window.WRIForms.showView('recon');
       A.toast('Photos and location filled in. Pick the type and save the point.', 5000);
@@ -233,7 +330,7 @@
 
   function clearAll() {
     D.items.forEach(function (it) { if (it.thumb) URL.revokeObjectURL(it.thumb); });
-    D.items = []; D.groups = []; D.nearby = {}; D.state = {};
+    D.items = []; D.groups = []; D.nearby = {}; D.state = {}; D.newIds = {};
     $('dStatus').textContent = ''; render();
   }
 
@@ -241,6 +338,9 @@
     A = window.WRIApp; $ = A.$; S = A.S;
     if (!$('dPick')) return;
     $('dPick').addEventListener('click', function () { if (!D.scanning) $('dInput').click(); });
+    if ($('dCloud')) $('dCloud').addEventListener('click', function () { fromCloud(this); });
+    window.addEventListener('online', flushMarks);
+    flushMarks();
     $('dInput').addEventListener('change', function () { pick(this); });
     $('dGroups').addEventListener('click', onClick);
     $('dClear').addEventListener('click', function () {
@@ -250,6 +350,7 @@
     });
     window.addEventListener('recon:saved', function (e) {
       var id = e.detail && e.detail.drone_group;
+      if (id && D.newIds[id]) { markCloud(D.newIds[id], 'filed', 'new recon point'); delete D.newIds[id]; }
       if (id) { D.state[id] = { filed: 'Saved as a new recon point' + (navigator.onLine ? ' · uploading' : ' · uploads when there’s signal') }; render(); }
     });
     window.addEventListener('incident:changed', function () { D.nearby = {}; render(); });

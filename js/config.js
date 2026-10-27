@@ -18,6 +18,8 @@ var CONFIG = {
   DRONE_EDGE: 2048,        // px: drone frames keep more detail than phone shots
   DRONE_QUALITY: 0.8,      // ~1 MB per M4T frame at 2048 px
   DRONE_RADIUS_M: 150,     // nearby recon points searched around a group (wider: 500)
+  // WRI Drone Cloud (P3): photos Pilot 2 auto-uploaded after landing, listed by incident
+  DRONE_CLOUD_URL: 'https://drone.5-78-213-35.sslip.io',
   CATEGORIES: ['Response Actions', 'Observations', 'Safety'],
   AFFILIATIONS: ['Responsible Party', 'Agency', 'Contractor', 'Private Citizen', 'Other'],
   // satellite tiles for the online pin map (public, no key)
