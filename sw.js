@@ -10,7 +10,7 @@
  *
  * APP_VERSION must equal the ?v= stamps in index.html; bump both together.
  */
-var APP_VERSION = '2026-10-27-1';
+var APP_VERSION = '2026-10-27-2';
 var CACHE = 'wri-recon-' + APP_VERSION;
 var LIB_CACHE = 'wri-recon-lib-leaflet-1.9.4';
 
