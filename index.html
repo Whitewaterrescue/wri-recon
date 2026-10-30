@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-27-3">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-30-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -26,6 +26,7 @@
     <button type="button" data-view="hasp">HASP</button>
     <button type="button" data-view="vessel">Vessel</button>
     <button type="button" data-view="rr">Request</button>
+    <button type="button" data-view="drill">Drill Eval</button>
   </nav>
   <div class="incbar"><label for="incidentSel">Incident</label><select id="incidentSel"></select></div>
   <div class="hint incbar-hint" id="incidentHint"></div>
@@ -135,6 +136,40 @@
     <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
     <div class="sub-title">My notes on this phone</div>
     <div id="l214List"></div>
+  </main>
+
+  <!-- Drill Eval (BNSF drill package: timeline, notifications, observations, hot wash) -->
+  <main class="view hidden" data-view="drill">
+    <div class="step-title">Drill evaluation</div>
+    <div class="toggle" id="deMode"><button type="button" data-val="timeline" class="active">Timeline</button><button type="button" data-val="notification">Notification</button><button type="button" data-val="observation">Observation</button><button type="button" data-val="hotwash">Hot wash</button></div>
+    <div class="field"><label for="deName">Your name</label><input id="deName" list="deNames" placeholder="Evaluator"><datalist id="deNames"></datalist></div>
+    <div class="field"><label for="deTime">When</label><div class="row"><input type="datetime-local" id="deTime"><button type="button" class="btn btn-ghost" id="deNow" style="flex:0 0 auto;width:auto;padding:0 18px">Now</button></div></div>
+    <div id="de_timeline">
+      <div class="field"><label for="deStep">What happened</label><textarea id="deStep" placeholder="e.g. Upstream anchor secured, line crossed, collection set complete"></textarea></div>
+      <label class="check"><input type="checkbox" id="deScen"> Scenario (simulated exercise-play time)</label>
+    </div>
+    <div id="de_notification" class="hidden">
+      <div class="field"><label for="deNotified">Notified (agency / person)</label><input id="deNotified" placeholder="e.g. NRC, Colorado PUC, BNSF SID"></div>
+      <div class="field"><label for="deMethod">Method / contact</label><input id="deMethod" placeholder="Phone, electronic, name"></div>
+      <div class="field"><label for="deBy">Made by</label><input id="deBy" placeholder="Who made the call"></div>
+      <div class="field"><label for="deRef">Case / ticket #</label><input id="deRef" placeholder="e.g. NRC report 1475570"></div>
+    </div>
+    <div id="de_observation" class="hidden">
+      <div class="field"><label for="deComp">Core component / objective</label><select id="deComp"></select></div>
+      <div class="toggle" id="deStat"><button type="button" data-val="observed">Observed</button><button type="button" data-val="not_observed">Exercised, not obs.</button><button type="button" data-val="na">N/A</button></div>
+      <div class="field"><label for="deObsNote">What you saw (cite photos if any)</label><textarea id="deObsNote"></textarea></div>
+    </div>
+    <div id="de_hotwash" class="hidden">
+      <div class="toggle" id="deHot"></div>
+      <div class="field"><label for="deHotNote">Hot wash point</label><textarea id="deHotNote"></textarea></div>
+      <div id="deActBox" class="hidden">
+        <div class="field"><label for="deActWho">Who follows up</label><input id="deActWho"></div>
+        <div class="field"><label for="deActWhen">By when</label><input id="deActWhen" placeholder="e.g. before the next DPX"></div>
+      </div>
+    </div>
+    <button class="btn btn-save wide" id="deSave" type="button">Save entry</button>
+    <div class="step-title">On this phone</div>
+    <div id="deList"></div>
   </main>
 
   <!-- HASP -->
@@ -259,15 +294,16 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-27-3"></script>
-  <script src="js/store.js?v=2026-10-27-3"></script>
-  <script src="js/api.js?v=2026-10-27-3"></script>
-  <script src="js/outbox.js?v=2026-10-27-3"></script>
-  <script src="js/forms.js?v=2026-10-27-3"></script>
-  <script src="js/app.js?v=2026-10-27-3"></script>
-  <script src="js/forms-ui.js?v=2026-10-27-3"></script>
-  <script src="js/dronemeta.js?v=2026-10-27-3"></script>
-  <script src="js/drone-ui.js?v=2026-10-27-3"></script>
+  <script src="js/config.js?v=2026-10-30-1"></script>
+  <script src="js/store.js?v=2026-10-30-1"></script>
+  <script src="js/api.js?v=2026-10-30-1"></script>
+  <script src="js/outbox.js?v=2026-10-30-1"></script>
+  <script src="js/forms.js?v=2026-10-30-1"></script>
+  <script src="js/app.js?v=2026-10-30-1"></script>
+  <script src="js/forms-ui.js?v=2026-10-30-1"></script>
+  <script src="js/dronemeta.js?v=2026-10-30-1"></script>
+  <script src="js/drone-ui.js?v=2026-10-30-1"></script>
+  <script src="js/drill-ui.js?v=2026-10-30-1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

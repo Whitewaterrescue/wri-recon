@@ -9,7 +9,7 @@
   var A, $, S;
   var cfg = { hasp: null, vessel: null };
   var view = 'recon', trip = null, openHasp = null, sig = { drawing: false, has: false };
-  var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request' };
+  var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
 
   function staff() {
     var a = (S.cfg && S.cfg.staff) || [], b = (cfg.hasp && cfg.hasp.staff) || [], c = (cfg.vessel && cfg.vessel.staff) || [];
@@ -72,6 +72,7 @@
     if (view === 'hasp') renderHasp();
     if (view === 'vessel') renderVessel();
     if (view === 'drone' && window.DroneUI) window.DroneUI.render();
+    if (view === 'drill' && window.DrillUI) window.DrillUI.render();
   }
 
   // ---------- cached lists ----------

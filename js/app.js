@@ -379,6 +379,9 @@
     if (r.kind === 'hasp') return 'HASP sign-off: ' + (f.employeeName || '');
     if (r.kind === 'vessel') return 'Vessel ' + f.step + ': ' + (f.passenger_name || f.vessel || '');
     if (r.kind === 'dattach') return 'Drone photos → ' + (f.target_label || 'recon point');
+    if (r.kind === 'drill') return ({ timeline: 'Timeline', notification: 'Notified', observation: 'Obs', hotwash: 'Hot wash' }[f.entry_kind] || 'Drill') +
+      ': ' + String(f.item_label || f.note || '').slice(0, 60) + (f.status ? ' (' + f.status.replace('_', ' ') + ')' : '');
+    if (r.kind === 'drilldel') return 'Delete: ' + String(f.label || '').slice(0, 60);
     return r.kind;
   }
 
