@@ -20,6 +20,18 @@ var CONFIG = {
   DRONE_RADIUS_M: 150,     // nearby recon points searched around a group (wider: 500)
   // WRI Drone Cloud (P3): photos Pilot 2 auto-uploaded after landing, listed by incident
   DRONE_CLOUD_URL: 'https://drone.whitewaterrescue.com',
+  // 214 quick log: one tap logs the item (time = now). A trailing … asks for details first.
+  QUICK_214: [
+    { group: 'Arrive / depart', items: ['Departed for site', 'Arrived on scene', 'Checked in at ICP / staging', 'Briefing attended',
+      'Assigned to…', 'Break', 'Resumed work', 'Departed scene', 'Shift complete / demobilized'] },
+    { group: 'Safety', items: ['Safety briefing / tailgate held', 'JSA reviewed with crew', 'PPE checked', 'Work zone set up',
+      'Air monitoring reading…', 'Decon set up', 'Decon complete', 'Near miss…', 'Injury reported…', 'Stop work…'] },
+    { group: 'Response', items: ['Site assessment started', 'Site assessment complete', 'Boom deployed…', 'Boom checked / adjusted',
+      'Boom recovered', 'Skimmer deployed', 'Skimmer recovered', 'Sorbents deployed', 'Product recovered…', 'Sample taken…',
+      'Drone flight launched', 'Drone flight complete', 'Wildlife observed…', 'Oil observed…'] },
+    { group: 'Logistics / comms', items: ['Equipment arrived…', 'Equipment problem…', 'Resource request sent…', 'Fuel / supplies run',
+      'Supervisor notified…', 'Agency / landowner on scene…', 'Radio / comms check'] }
+  ],
   CATEGORIES: ['Response Actions', 'Observations', 'Safety'],
   AFFILIATIONS: ['Responsible Party', 'Agency', 'Contractor', 'Private Citizen', 'Other'],
   // satellite tiles for the online pin map (public, no key)

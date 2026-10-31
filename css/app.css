@@ -117,3 +117,13 @@ textarea { min-height: 96px; resize: vertical; }
 .dacts .btn { flex: 1; padding: 10px 12px; font-size: 14px; }
 .dlist { display: flex; flex-direction: column; gap: 6px; }
 .dlist .item { background: var(--card); }
+/* 214 quick log (2026-10-31): one tap = a 214 entry after a 4 s undo window */
+.q-hint { margin: 0 0 8px; }
+.q-group { font-size: 12px; font-weight: 700; color: var(--muted); margin: 10px 0 6px; }
+.q-chip { padding: 11px 14px; font-size: 14px; text-align: left; }
+.q-chip.sel { background: var(--red); border-color: var(--red); }
+.q-pend { position: sticky; top: 8px; z-index: 40; display: flex; align-items: center; gap: 10px; background: #1f3a2a; border: 1.5px solid var(--green); border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-bottom: 6px; }
+.q-pend span { flex: 1; }
+.q-undo { background: var(--panel); color: var(--text); border: 1.5px solid var(--line); border-radius: 16px; padding: 7px 14px; font-size: 14px; font-weight: 700; }
+/* ?embed=214: the Field App's floating 214 button opens only this tab */
+body.embed .header, body.embed .tabs, body.embed .progress, body.embed #a2hsCard { display: none !important; }
