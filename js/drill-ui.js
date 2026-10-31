@@ -1,4 +1,5 @@
 /* WRI field app (offline) — the Drill Eval tab (2026-10-30).
+ * 2026-10-31: the component list follows the Drill setup picks (incident drill_components), "Show all" for the rest.
  *
  * What the evaluator records live during a BNSF / agency drill, for the BNSF drill package:
  *   Timeline      a step and its time (tick "Scenario" for simulated exercise-play times)
@@ -99,10 +100,29 @@
     });
   }
 
+  // Components picked at the admin's Drill setup (Cody 2026-10-31): only those (+ the DPX / FRP objectives) are
+  // listed; "Show all" lists every one. No picks for the incident = everything, as before.
+  function planned() {
+    var id = S.incident && S.incident.incident_id;
+    var r = ((S.cfg && S.cfg.incidents) || []).filter(function (x) { return x.incident_id === id; })[0];
+    return (r && r.drill_components) || [];
+  }
+  function fillComponents() {
+    var plan = planned(), cur = $('deComp').value;
+    $('deAllBox').classList.toggle('hidden', !plan.length);
+    var all = !plan.length || $('deAll').checked;
+    var list = COMPONENTS.filter(function (c) { return all || plan.indexOf(c[0]) >= 0 || /^(dpx|frp)_/.test(c[0]); });
+    $('deComp').innerHTML = '<option value="">Select…</option>' + list.map(function (c) {
+      return '<option value="' + c[0] + '"' + (c[0] === cur ? ' selected' : '') + '>' + A.esc(c[1]) + (all && plan.length && plan.indexOf(c[0]) >= 0 ? ' (planned)' : '') + '</option>';
+    }).join('');
+  }
+
   function boot() {
     A = window.WRIApp; $ = A.$; S = A.S;
     if (!$('deSave')) return;
-    $('deComp').innerHTML = '<option value="">Select…</option>' + COMPONENTS.map(function (c) { return '<option value="' + c[0] + '">' + A.esc(c[1]) + '</option>'; }).join('');
+    fillComponents();
+    $('deAll').addEventListener('change', fillComponents);
+    window.addEventListener('incident:changed', fillComponents);
     $('deHot').innerHTML = HOT.map(function (h, i) { return '<button type="button" data-val="' + h[0] + '"' + (i ? '' : ' class="active"') + '>' + h[1] + '</button>'; }).join('');
     $('deMode').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showMode(b.dataset.val); });
     $('deStat').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('deStat', b.dataset.val); });
