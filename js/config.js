@@ -21,24 +21,24 @@ var CONFIG = {
   // WRI Drone Cloud (P3): photos Pilot 2 auto-uploaded after landing, listed by incident
   DRONE_CLOUD_URL: 'https://drone.whitewaterrescue.com',
   // 214 quick log: one tap logs the item (time = now). A trailing … asks for details first.
-  // Page 1 = the categories (big red buttons; icon keys are drawn in forms-ui.js).
+  // Page 1 = the categories (big buttons; icon keys are drawn in forms-ui.js, color = a .qc-<color> class in app.css).
   // Page 2 = the activities as pills: [label, emoji, color go | info | warn | alert | idle].
   QUICK_214: [
-    { group: 'Arrive / Depart', icon: 'truck', items: [
+    { group: 'Arrive / Depart', icon: 'truck', color: 'blue', items: [
       ['Departed for site', '🚗', 'info'], ['Arrived on scene', '📍', 'go'], ['Checked in at ICP / staging', '📋', 'go'],
       ['Briefing attended', '🗣️', 'info'], ['Assigned to…', '👷', 'info'], ['Break', '☕', 'idle'],
       ['Resumed work', '▶️', 'go'], ['Departed scene', '🚙', 'info'], ['Shift complete / demobilized', '🏁', 'idle']] },
-    { group: 'Safety', icon: 'hardhat', items: [
+    { group: 'Safety', icon: 'hardhat', color: 'orange', items: [
       ['Safety briefing / tailgate held', '🦺', 'go'], ['JSA reviewed with crew', '📝', 'go'], ['PPE checked', '🧤', 'go'],
       ['Work zone set up', '🚧', 'go'], ['Air monitoring reading…', '🌬️', 'info'], ['Decon set up', '🚿', 'go'],
       ['Decon complete', '✅', 'go'], ['Near miss…', '⚠️', 'warn'], ['Injury reported…', '🩹', 'alert'], ['Stop work…', '✋', 'alert']] },
-    { group: 'Response', icon: 'waves', items: [
+    { group: 'Response', icon: 'waves', color: 'red', items: [
       ['Site assessment started', '🔍', 'info'], ['Site assessment complete', '✅', 'go'], ['Boom deployed…', '〰️', 'go'],
       ['Boom checked / adjusted', '🔧', 'info'], ['Boom recovered', '↩️', 'idle'], ['Skimmer deployed', '⚙️', 'go'],
       ['Skimmer recovered', '↩️', 'idle'], ['Sorbents deployed', '🧽', 'go'], ['Product recovered…', '🛢️', 'go'],
       ['Sample taken…', '🧪', 'info'], ['Drone flight launched', '🛫', 'info'], ['Drone flight complete', '🛬', 'idle'],
       ['Wildlife observed…', '🦆', 'warn'], ['Oil observed…', '💧', 'warn']] },
-    { group: 'Logistics / Comms', icon: 'radio', items: [
+    { group: 'Logistics / Comms', icon: 'radio', color: 'green', items: [
       ['Equipment arrived…', '📦', 'go'], ['Equipment problem…', '🛠️', 'warn'], ['Resource request sent…', '📨', 'info'],
       ['Fuel / supplies run', '⛽', 'idle'], ['Supervisor notified…', '📞', 'info'], ['Agency / landowner on scene…', '🏛️', 'info'],
       ['Radio / comms check', '📻', 'info']] }
