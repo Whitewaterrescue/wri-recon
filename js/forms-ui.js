@@ -100,53 +100,67 @@
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
     write214(who, act, at, $('l214Save'), true);
   }
-  function write214(who, act, at, btn, clearAct) {
+  function write214(who, act, at, btn, clearAct, done) {
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     save({ recon_id: A.uuid(), kind: '214', incident: S.incident,
            fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: $('l214Unit').checked, section: $('l214Sec').value } },
       btn, '214 note saved.', function () {
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
+        if (done) done();
         if (EMBED && window.parent !== window) try { window.parent.postMessage({ type: 'wri-214', action: 'saved', activity: act }, location.origin); } catch (e) {}
       });
   }
 
-  // Quick log: one tap = a 214 entry with the time of the tap. A 4 s window
-  // (green bar + Undo) catches mis-taps before it reaches the outbox.
-  var qPend = null, Q_WAIT = 4000;
+  // Quick log (2026-10-31, Cody): page 1 = four big red category buttons,
+  // page 2 = that category's activities as colored pills, details, Log it.
+  var Q_ICONS = {   // 24x24 stroke icons (Lucide shapes)
+    truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    hardhat: '<path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M14 6a6 6 0 0 1 6 6v3"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><rect x="2" y="15" width="20" height="4" rx="1"/>',
+    waves: '<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>',
+    radio: '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>'
+  };
+  var qCat = null, qPick = null;
+  function qSvg(k) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (Q_ICONS[k] || '') + '</svg>'; }
+  function needsDetail(item) { return /\u2026$/.test(item[0]); }
   function buildQuick() {
-    $('q214').innerHTML = (CONFIG.QUICK_214 || []).map(function (g) {
-      return '<div class="q-group">' + A.esc(g.group) + '</div><div class="chips">' +
-        g.items.map(function (t) { return '<button type="button" class="chip q-chip">' + A.esc(t) + '</button>'; }).join('') + '</div>';
+    $('q214Cats').innerHTML = (CONFIG.QUICK_214 || []).map(function (g, i) {
+      return '<button type="button" class="q-cat" data-i="' + i + '">' + qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span></button>';
     }).join('');
   }
-  function quick214(btn) {
+  function openCat(i) {
+    var g = (CONFIG.QUICK_214 || [])[i]; if (!g) return;
+    qCat = g; qPick = null;
+    $('q214Head').innerHTML = qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span>';
+    $('q214Pills').innerHTML = g.items.map(function (it, j) {
+      return '<button type="button" class="q-pill q-' + A.esc(it[2] || 'info') + '" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
+        '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
+    }).join('');
+    $('q214Det').value = '';
+    qSync();
+    $('q214Home').classList.add('hidden'); $('q214Page').classList.remove('hidden');
+    window.scrollTo(0, 0);
+  }
+  function closeCat() {
+    qCat = null; qPick = null;
+    $('q214Page').classList.add('hidden'); $('q214Home').classList.remove('hidden');
+    window.scrollTo(0, 0);
+  }
+  function qSync() {   // pill highlight, details label, submit text
+    [].forEach.call($('q214Pills').children, function (b) { b.classList.toggle('sel', qPick !== null && Number(b.dataset.j) === qPick); });
+    var it = qCat && qPick !== null ? qCat.items[qPick] : null, b = $('q214Submit');
+    $('q214DetLbl').textContent = it && needsDetail(it) ? 'Details (needed)' : 'Details (optional)';
+    b.disabled = !it;
+    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') : 'Pick an activity';
+  }
+  function submitQuick() {
+    if (!qCat || qPick === null) return;
     if (!needIncident()) return;
     var who = pickedName($('l214Name'), $('l214Other'));
-    if (!who) { A.toast('Pick your name first.'); $('l214Name').focus(); return; }
-    var item = btn.textContent.trim();
-    if (/…$/.test(item)) {   // needs details: start the note, they finish it and tap Save note
-      $('l214Act').value = item.replace(/…$/, '').trim() + ': ';
-      $('l214Time').value = A.localNow();
-      $('l214Act').focus(); $('l214Act').scrollIntoView({ block: 'center' });
-      return A.toast('Add the details, then tap Save note.');
-    }
-    cancelQuick();
-    var extra = $('l214Act').value.trim(), act = extra ? item + ' — ' + extra : item;
-    qPend = { who: who, act: act, at: Date.now(), btn: btn, extra: !!extra, timer: setTimeout(commitQuick, Q_WAIT) };
-    btn.classList.add('sel');
-    $('q214PendTxt').textContent = 'Logging “' + act + '” (' + new Date(qPend.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')';
-    $('q214Pend').classList.remove('hidden');
-  }
-  function cancelQuick() {
-    if (!qPend) return;
-    clearTimeout(qPend.timer); qPend.btn.classList.remove('sel'); qPend = null;
-    $('q214Pend').classList.add('hidden');
-  }
-  function commitQuick() {
-    var p = qPend; if (!p) return;
-    qPend = null; $('q214Pend').classList.add('hidden'); p.btn.classList.remove('sel');
-    write214(p.who, p.act, p.at, p.btn, p.extra);
+    if (!who) { A.toast('Pick your name at the top first.'); window.scrollTo(0, 0); $('l214Name').focus(); return; }
+    var it = qCat.items[qPick], label = it[0].replace(/\u2026$/, ''), det = $('q214Det').value.trim();
+    if (needsDetail(it) && !det) { A.toast('Add the details for \u201c' + label + '\u201d.'); $('q214Det').focus(); return; }
+    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, closeCat);
   }
 
   // ---------- 213-RR ----------
@@ -332,8 +346,10 @@
       });
     }
     buildQuick();
-    $('q214').addEventListener('click', function (e) { var b = e.target.closest('.q-chip'); if (b && !b.disabled) quick214(b); });
-    $('q214Undo').addEventListener('click', function () { cancelQuick(); A.toast('Not logged.'); });
+    $('q214Cats').addEventListener('click', function (e) { var b = e.target.closest('.q-cat'); if (b) openCat(Number(b.dataset.i)); });
+    $('q214Pills').addEventListener('click', function (e) { var b = e.target.closest('.q-pill'); if (!b) return; var j = Number(b.dataset.j); qPick = qPick === j ? null : j; qSync(); });
+    $('q214Back').addEventListener('click', closeCat);
+    $('q214Submit').addEventListener('click', submitQuick);
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
     $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); });

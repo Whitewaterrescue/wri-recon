@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-31-3">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-31-4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -124,25 +124,30 @@
     <div class="step-title">ICS 214 Activity Log</div>
     <div class="field"><label for="l214Name">Your name</label><select id="l214Name"></select></div>
     <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
-    <div class="field">
-      <label>Quick log</label>
-      <div class="hint q-hint">One tap logs it with the time now. Items with &hellip; ask for details first. Anything typed in Activity below is added to the tapped item.</div>
-      <div class="q-pend hidden" id="q214Pend"><span id="q214PendTxt"></span><button class="q-undo" id="q214Undo" type="button">Undo</button></div>
-      <div id="q214"></div>
+    <!-- page 1: four category buttons; page 2: that category's activities + Log it -->
+    <div id="q214Home">
+      <div class="q-cats" id="q214Cats"></div>
+      <div class="sub-title">Or write your own</div>
+      <div class="field"><label for="l214Sec">Unit log</label><select id="l214Sec">
+        <option value="">Auto (from the work chart)</option><option value="command">Command</option>
+        <option value="operations">Operations</option><option value="planning">Planning</option>
+        <option value="logistics">Logistics</option><option value="finance">Finance</option><option value="safety">Safety</option>
+      </select><div class="hint">Auto files it to your section on the incident work chart.</div></div>
+      <div class="field"><label for="l214Pos">ICS position (optional)</label><input id="l214Pos" placeholder="e.g. Div A Supervisor"></div>
+      <div class="field"><label for="l214Time">When</label><input type="datetime-local" id="l214Time"></div>
+      <div class="field"><label for="l214Act">Activity</label><textarea id="l214Act" placeholder="What happened / what you did"></textarea></div>
+      <label class="check"><input type="checkbox" id="l214Unit" checked> Also add to the unit log</label>
+      <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
+      <div class="sub-title">My notes on this phone</div>
+      <div id="l214List"></div>
     </div>
-    <div class="sub-title">Or write your own</div>
-    <div class="field"><label for="l214Sec">Unit log</label><select id="l214Sec">
-      <option value="">Auto (from the work chart)</option><option value="command">Command</option>
-      <option value="operations">Operations</option><option value="planning">Planning</option>
-      <option value="logistics">Logistics</option><option value="finance">Finance</option><option value="safety">Safety</option>
-    </select><div class="hint">Auto files it to your section on the incident work chart.</div></div>
-    <div class="field"><label for="l214Pos">ICS position (optional)</label><input id="l214Pos" placeholder="e.g. Div A Supervisor"></div>
-    <div class="field"><label for="l214Time">When</label><input type="datetime-local" id="l214Time"></div>
-    <div class="field"><label for="l214Act">Activity</label><textarea id="l214Act" placeholder="What happened / what you did"></textarea></div>
-    <label class="check"><input type="checkbox" id="l214Unit" checked> Also add to the unit log</label>
-    <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
-    <div class="sub-title">My notes on this phone</div>
-    <div id="l214List"></div>
+    <div id="q214Page" class="hidden">
+      <button class="q-back" id="q214Back" type="button">&lsaquo; Categories</button>
+      <div class="q-head" id="q214Head"></div>
+      <div class="q-pills" id="q214Pills"></div>
+      <div class="field q-det"><label for="q214Det" id="q214DetLbl">Details (optional)</label><textarea id="q214Det" placeholder="Anything to add: where, how much, who"></textarea></div>
+      <button class="btn btn-save wide q-submit" id="q214Submit" type="button" disabled>Pick an activity</button>
+    </div>
   </main>
 
   <!-- Drill Eval (BNSF drill package: timeline, notifications, observations, hot wash) -->
@@ -302,16 +307,16 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-31-3"></script>
-  <script src="js/store.js?v=2026-10-31-3"></script>
-  <script src="js/api.js?v=2026-10-31-3"></script>
-  <script src="js/outbox.js?v=2026-10-31-3"></script>
-  <script src="js/forms.js?v=2026-10-31-3"></script>
-  <script src="js/app.js?v=2026-10-31-3"></script>
-  <script src="js/forms-ui.js?v=2026-10-31-3"></script>
-  <script src="js/dronemeta.js?v=2026-10-31-3"></script>
-  <script src="js/drone-ui.js?v=2026-10-31-3"></script>
-  <script src="js/drill-ui.js?v=2026-10-31-3"></script>
+  <script src="js/config.js?v=2026-10-31-4"></script>
+  <script src="js/store.js?v=2026-10-31-4"></script>
+  <script src="js/api.js?v=2026-10-31-4"></script>
+  <script src="js/outbox.js?v=2026-10-31-4"></script>
+  <script src="js/forms.js?v=2026-10-31-4"></script>
+  <script src="js/app.js?v=2026-10-31-4"></script>
+  <script src="js/forms-ui.js?v=2026-10-31-4"></script>
+  <script src="js/dronemeta.js?v=2026-10-31-4"></script>
+  <script src="js/drone-ui.js?v=2026-10-31-4"></script>
+  <script src="js/drill-ui.js?v=2026-10-31-4"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
