@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-10-31-2">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-31-3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -124,6 +124,13 @@
     <div class="step-title">ICS 214 Activity Log</div>
     <div class="field"><label for="l214Name">Your name</label><select id="l214Name"></select></div>
     <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
+    <div class="field">
+      <label>Quick log</label>
+      <div class="hint q-hint">One tap logs it with the time now. Items with &hellip; ask for details first. Anything typed in Activity below is added to the tapped item.</div>
+      <div class="q-pend hidden" id="q214Pend"><span id="q214PendTxt"></span><button class="q-undo" id="q214Undo" type="button">Undo</button></div>
+      <div id="q214"></div>
+    </div>
+    <div class="sub-title">Or write your own</div>
     <div class="field"><label for="l214Sec">Unit log</label><select id="l214Sec">
       <option value="">Auto (from the work chart)</option><option value="command">Command</option>
       <option value="operations">Operations</option><option value="planning">Planning</option>
@@ -295,16 +302,16 @@
   <div class="toast hidden" id="toast"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-10-31-2"></script>
-  <script src="js/store.js?v=2026-10-31-2"></script>
-  <script src="js/api.js?v=2026-10-31-2"></script>
-  <script src="js/outbox.js?v=2026-10-31-2"></script>
-  <script src="js/forms.js?v=2026-10-31-2"></script>
-  <script src="js/app.js?v=2026-10-31-2"></script>
-  <script src="js/forms-ui.js?v=2026-10-31-2"></script>
-  <script src="js/dronemeta.js?v=2026-10-31-2"></script>
-  <script src="js/drone-ui.js?v=2026-10-31-2"></script>
-  <script src="js/drill-ui.js?v=2026-10-31-2"></script>
+  <script src="js/config.js?v=2026-10-31-3"></script>
+  <script src="js/store.js?v=2026-10-31-3"></script>
+  <script src="js/api.js?v=2026-10-31-3"></script>
+  <script src="js/outbox.js?v=2026-10-31-3"></script>
+  <script src="js/forms.js?v=2026-10-31-3"></script>
+  <script src="js/app.js?v=2026-10-31-3"></script>
+  <script src="js/forms-ui.js?v=2026-10-31-3"></script>
+  <script src="js/dronemeta.js?v=2026-10-31-3"></script>
+  <script src="js/drone-ui.js?v=2026-10-31-3"></script>
+  <script src="js/drill-ui.js?v=2026-10-31-3"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

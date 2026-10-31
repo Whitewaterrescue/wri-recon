@@ -9,6 +9,8 @@
   var A, $, S;
   var cfg = { hasp: null, vessel: null };
   var view = 'recon', trip = null, openHasp = null, sig = { drawing: false, has: false };
+  // ?embed=214: the Field App's floating 214 button opens this page with only the 214 tab
+  var EMBED = /[?&]embed=214(&|#|$)/.test(location.search);
   var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
 
   function staff() {
@@ -67,7 +69,10 @@
     render();
   }
   function render() {
-    if (view === '214') { fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderMine('214', $('l214List')); }
+    if (view === '214') {
+      fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderMine('214', $('l214List'));
+      if (!$('l214Act').value.trim()) $('l214Time').value = A.localNow();   // the panel can sit open for hours
+    }
     if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || ''; renderMine('rr', $('rrList')); }
     if (view === 'hasp') renderHasp();
     if (view === 'vessel') renderVessel();
@@ -92,11 +97,56 @@
     var who = pickedName($('l214Name'), $('l214Other')), act = $('l214Act').value.trim();
     if (!who) return A.toast('Pick your name.');
     if (!act) return A.toast('Write the activity.');
-    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
+    write214(who, act, at, $('l214Save'), true);
+  }
+  function write214(who, act, at, btn, clearAct) {
+    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     save({ recon_id: A.uuid(), kind: '214', incident: S.incident,
            fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: $('l214Unit').checked, section: $('l214Sec').value } },
-      $('l214Save'), '214 note saved.', function () { $('l214Act').value = ''; $('l214Time').value = A.localNow(); renderMine('214', $('l214List')); });
+      btn, '214 note saved.', function () {
+        if (clearAct) $('l214Act').value = '';
+        $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
+        if (EMBED && window.parent !== window) try { window.parent.postMessage({ type: 'wri-214', action: 'saved', activity: act }, location.origin); } catch (e) {}
+      });
+  }
+
+  // Quick log: one tap = a 214 entry with the time of the tap. A 4 s window
+  // (green bar + Undo) catches mis-taps before it reaches the outbox.
+  var qPend = null, Q_WAIT = 4000;
+  function buildQuick() {
+    $('q214').innerHTML = (CONFIG.QUICK_214 || []).map(function (g) {
+      return '<div class="q-group">' + A.esc(g.group) + '</div><div class="chips">' +
+        g.items.map(function (t) { return '<button type="button" class="chip q-chip">' + A.esc(t) + '</button>'; }).join('') + '</div>';
+    }).join('');
+  }
+  function quick214(btn) {
+    if (!needIncident()) return;
+    var who = pickedName($('l214Name'), $('l214Other'));
+    if (!who) { A.toast('Pick your name first.'); $('l214Name').focus(); return; }
+    var item = btn.textContent.trim();
+    if (/…$/.test(item)) {   // needs details: start the note, they finish it and tap Save note
+      $('l214Act').value = item.replace(/…$/, '').trim() + ': ';
+      $('l214Time').value = A.localNow();
+      $('l214Act').focus(); $('l214Act').scrollIntoView({ block: 'center' });
+      return A.toast('Add the details, then tap Save note.');
+    }
+    cancelQuick();
+    var extra = $('l214Act').value.trim(), act = extra ? item + ' — ' + extra : item;
+    qPend = { who: who, act: act, at: Date.now(), btn: btn, extra: !!extra, timer: setTimeout(commitQuick, Q_WAIT) };
+    btn.classList.add('sel');
+    $('q214PendTxt').textContent = 'Logging “' + act + '” (' + new Date(qPend.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ')';
+    $('q214Pend').classList.remove('hidden');
+  }
+  function cancelQuick() {
+    if (!qPend) return;
+    clearTimeout(qPend.timer); qPend.btn.classList.remove('sel'); qPend = null;
+    $('q214Pend').classList.add('hidden');
+  }
+  function commitQuick() {
+    var p = qPend; if (!p) return;
+    qPend = null; $('q214Pend').classList.add('hidden'); p.btn.classList.remove('sel');
+    write214(p.who, p.act, p.at, p.btn, p.extra);
   }
 
   // ---------- 213-RR ----------
@@ -273,6 +323,17 @@
   // ---------- boot ----------
   function boot() {
     A = window.WRIApp; $ = A.$; S = A.S;
+    if (EMBED) {
+      document.body.classList.add('embed'); CONFIG.TABS = ['214'];
+      var nm = /[?&]name=([^&#]+)/.exec(location.search);   // the Field App's checked-in name
+      if (nm && !A.lsGet('wri_recon_name')) A.lsSet('wri_recon_name', decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim());
+      window.addEventListener('message', function (e) {   // panel reopened: refresh the time and the list
+        if (e.origin === location.origin && e.data && e.data.type === 'wri-214' && e.data.action === 'open') render();
+      });
+    }
+    buildQuick();
+    $('q214').addEventListener('click', function (e) { var b = e.target.closest('.q-chip'); if (b && !b.disabled) quick214(b); });
+    $('q214Undo').addEventListener('click', function () { cancelQuick(); A.toast('Not logged.'); });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
     $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); });
@@ -314,7 +375,7 @@
     };
     refreshCfg();
     window.addEventListener('online', refreshCfg);
-    showView((location.hash || '').replace('#', '') || 'recon');
+    showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
   }
   window.WRIForms = { showView: function (v) { showView(v); } };
   document.addEventListener('DOMContentLoaded', boot);
