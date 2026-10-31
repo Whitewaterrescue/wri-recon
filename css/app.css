@@ -117,13 +117,27 @@ textarea { min-height: 96px; resize: vertical; }
 .dacts .btn { flex: 1; padding: 10px 12px; font-size: 14px; }
 .dlist { display: flex; flex-direction: column; gap: 6px; }
 .dlist .item { background: var(--card); }
-/* 214 quick log (2026-10-31): one tap = a 214 entry after a 4 s undo window */
-.q-hint { margin: 0 0 8px; }
-.q-group { font-size: 12px; font-weight: 700; color: var(--muted); margin: 10px 0 6px; }
-.q-chip { padding: 11px 14px; font-size: 14px; text-align: left; }
-.q-chip.sel { background: var(--red); border-color: var(--red); }
-.q-pend { position: sticky; top: 8px; z-index: 40; display: flex; align-items: center; gap: 10px; background: #1f3a2a; border: 1.5px solid var(--green); border-radius: 8px; padding: 10px 12px; font-size: 14px; margin-bottom: 6px; }
-.q-pend span { flex: 1; }
-.q-undo { background: var(--panel); color: var(--text); border: 1.5px solid var(--line); border-radius: 16px; padding: 7px 14px; font-size: 14px; font-weight: 700; }
+/* 214 quick log (2026-10-31): page 1 = big red category buttons, page 2 = colored activity pills */
+.q-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 6px 0 4px; }
+.q-cat { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 124px; padding: 14px 8px;
+  border: none; border-radius: 14px; background: var(--red); color: #fff; font-size: 16px; font-weight: 800; line-height: 1.2; text-align: center;
+  box-shadow: 0 3px 0 #a3171c; }
+.q-cat:active { transform: translateY(2px); box-shadow: 0 1px 0 #a3171c; }
+.q-cat svg { width: 52px; height: 52px; }
+.q-back { background: none; border: none; color: var(--text); font-size: 16px; font-weight: 700; padding: 6px 0; margin-bottom: 4px; }
+.q-head { display: flex; align-items: center; gap: 10px; background: var(--red); color: #fff; border-radius: 12px; padding: 12px 14px; font-size: 18px; font-weight: 800; margin-bottom: 14px; }
+.q-head svg { width: 32px; height: 32px; flex: none; }
+.q-pills { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.q-pill { display: flex; align-items: center; gap: 8px; padding: 11px 16px 11px 12px; border-radius: 999px; font-size: 15px; font-weight: 600;
+  color: var(--text); border: 2px solid var(--pc); background: var(--pb); text-align: left; }
+.q-pill .q-ico { font-size: 20px; line-height: 1; }
+.q-pill.sel { background: var(--pc); color: #fff; box-shadow: 0 0 0 3px #fff; }
+.q-go    { --pc: #22a55a; --pb: rgba(34,165,90,.16); }
+.q-info  { --pc: #3b82f6; --pb: rgba(59,130,246,.16); }
+.q-warn  { --pc: #e08a00; --pb: rgba(240,165,0,.16); }
+.q-alert { --pc: #EC2329; --pb: rgba(236,35,41,.18); }
+.q-idle  { --pc: #8a9091; --pb: rgba(138,144,145,.16); }
+.q-submit { font-size: 19px; font-weight: 800; padding: 18px 12px; border-radius: 12px; }
+.q-submit:disabled { background: var(--card); color: var(--muted); }
 /* ?embed=214: the Field App's floating 214 button opens only this tab */
 body.embed .header, body.embed .tabs, body.embed .progress, body.embed #a2hsCard { display: none !important; }
