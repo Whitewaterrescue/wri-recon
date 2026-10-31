@@ -1,5 +1,6 @@
 /* WRI field app (offline) — the Drill Eval tab (2026-10-30).
- * 2026-10-31: the component list follows the Drill setup picks (incident drill_components), "Show all" for the rest.
+ * 2026-10-31: the component list follows the Drill setup picks (incident drill_components / drill_ecy), Washington Ecology
+ *   credits on Ecology drills (item_key ecy_<code>), "Show all" for the rest.
  *
  * What the evaluator records live during a BNSF / agency drill, for the BNSF drill package:
  *   Timeline      a step and its time (tick "Scenario" for simulated exercise-play times)
@@ -102,19 +103,43 @@
 
   // Components picked at the admin's Drill setup (Cody 2026-10-31): only those (+ the DPX / FRP objectives) are
   // listed; "Show all" lists every one. No picks for the incident = everything, as before.
-  function planned() {
+  // Washington Ecology deployment-drill credits (same codes as the admin's Drill setup and the packager's checklist)
+  var ECY = [
+    ['1.1', 'Internal response team notified'], ['1.2', 'Entire response organization notified'], ['1.3', 'Government notifications (NRC / EMD #)'],
+    ['5.A1', 'Initial site safety'], ['5.A2', 'Local response team mobilized'], ['5.A3', 'Personnel appropriate to conditions'],
+    ['5.A5', 'PH comms field-tested'], ['5.A6', 'PH & contractor comms during deployment'], ['5.A7', 'Spill-tracking equipment deployed'],
+    ['5.B1', 'Boom / recovery / interim storage deployed'], ['5.B2', 'PH-owned boom deployed'], ['5.B3', 'PH-owned mechanical recovery'],
+    ['5.B4', 'Non-floating oils equipment sourcing'], ['5.B5', 'Transfer to shoreside storage'], ['5.B6', 'Land-spill containment'],
+    ['5.B7', 'Damage control procedures'], ['5.B9', 'Large-scale equipment deployment'], ['5.C1', 'GRP / protection strategy deployed'],
+    ['5.D1', 'Oiled-wildlife equipment deployed']
+  ];
+
+  // What the admin's Drill setup picked for the incident (Cody 2026-10-31): only the picked NPREP components (+ the
+  // DPX / FRP objectives) and, on an Ecology drill, only the picked Ecology credits are listed; "Show all" lists
+  // every one. Nothing picked = everything, as before.
+  function plan() {
     var id = S.incident && S.incident.incident_id;
-    var r = ((S.cfg && S.cfg.incidents) || []).filter(function (x) { return x.incident_id === id; })[0];
-    return (r && r.drill_components) || [];
+    var r = ((S.cfg && S.cfg.incidents) || []).filter(function (x) { return x.incident_id === id; })[0] || {};
+    return { cmp: r.drill_components || [], ecology: !!r.drill_ecology, ecy: r.drill_ecy || [] };
   }
   function fillComponents() {
-    var plan = planned(), cur = $('deComp').value;
-    $('deAllBox').classList.toggle('hidden', !plan.length);
-    var all = !plan.length || $('deAll').checked;
-    var list = COMPONENTS.filter(function (c) { return all || plan.indexOf(c[0]) >= 0 || /^(dpx|frp)_/.test(c[0]); });
-    $('deComp').innerHTML = '<option value="">Select…</option>' + list.map(function (c) {
-      return '<option value="' + c[0] + '"' + (c[0] === cur ? ' selected' : '') + '>' + A.esc(c[1]) + (all && plan.length && plan.indexOf(c[0]) >= 0 ? ' (planned)' : '') + '</option>';
-    }).join('');
+    var p = plan(), cur = $('deComp').value, showAll = $('deAll').checked;
+    $('deAllBox').classList.toggle('hidden', !p.cmp.length && !p.ecy.length && !p.ecology);
+    var opt = function (key, label, picked) {
+      return '<option value="' + key + '"' + (key === cur ? ' selected' : '') + '>' + A.esc(label) + (picked ? ' (planned)' : '') + '</option>';
+    };
+    var allC = !p.cmp.length || showAll;
+    var html = '<option value="">Select…</option>';
+    // one form per drill (Cody 2026-10-31): an Ecology drill lists the Ecology credits, NPREP only under Show all
+    if (!p.ecology || showAll) html += '<optgroup label="NPREP core components">' + COMPONENTS.filter(function (c) {
+      return allC || p.cmp.indexOf(c[0]) >= 0 || /^(dpx|frp)_/.test(c[0]);
+    }).map(function (c) { return opt(c[0], c[1], allC && p.cmp.indexOf(c[0]) >= 0); }).join('') + '</optgroup>';
+    if (p.ecology || showAll) {
+      var allE = !p.ecy.length || showAll;
+      html += '<optgroup label="Washington Ecology credits">' + ECY.filter(function (c) { return allE || p.ecy.indexOf(c[0]) >= 0; })
+        .map(function (c) { return opt('ecy_' + c[0], 'ECY ' + c[0] + ' ' + c[1], allE && p.ecy.indexOf(c[0]) >= 0); }).join('') + '</optgroup>';
+    }
+    $('deComp').innerHTML = html;
   }
 
   function boot() {
