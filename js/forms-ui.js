@@ -126,12 +126,13 @@
   function needsDetail(item) { return /\u2026$/.test(item[0]); }
   function buildQuick() {
     $('q214Cats').innerHTML = (CONFIG.QUICK_214 || []).map(function (g, i) {
-      return '<button type="button" class="q-cat" data-i="' + i + '">' + qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span></button>';
+      return '<button type="button" class="q-cat qc-' + A.esc(g.color || 'red') + '" data-i="' + i + '">' + qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span></button>';
     }).join('');
   }
   function openCat(i) {
     var g = (CONFIG.QUICK_214 || [])[i]; if (!g) return;
     qCat = g; qPick = null;
+    $('q214Head').className = 'q-head qc-' + (g.color || 'red');
     $('q214Head').innerHTML = qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span>';
     $('q214Pills').innerHTML = g.items.map(function (it, j) {
       return '<button type="button" class="q-pill q-' + A.esc(it[2] || 'info') + '" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
