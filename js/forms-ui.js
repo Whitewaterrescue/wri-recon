@@ -98,15 +98,16 @@
     if (!who) return A.toast('Pick your name.');
     if (!act) return A.toast('Write the activity.');
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
-    write214(who, act, at, $('l214Save'), true);
+    write214(who, act, at, $('l214Save'), true, $('l214Unit').checked);
   }
-  function write214(who, act, at, btn, clearAct, done) {
+  function write214(who, act, at, btn, clearAct, unit, done) {   // unit: also post to the unit log (default: my own 214A only)
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     save({ recon_id: A.uuid(), kind: '214', incident: S.incident,
-           fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: $('l214Unit').checked, section: $('l214Sec').value } },
+           fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit, section: $('l214Sec').value } },
       btn, '214 note saved.', function () {
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
+        $('l214Unit').checked = false; $('q214Unit').checked = false;   // every entry starts personal
         if (done) done();
         if (EMBED && window.parent !== window) try { window.parent.postMessage({ type: 'wri-214', action: 'saved', activity: act }, location.origin); } catch (e) {}
       });
@@ -160,7 +161,7 @@
     if (!who) { A.toast('Pick your name at the top first.'); window.scrollTo(0, 0); $('l214Name').focus(); return; }
     var it = qCat.items[qPick], label = it[0].replace(/\u2026$/, ''), det = $('q214Det').value.trim();
     if (needsDetail(it) && !det) { A.toast('Add the details for \u201c' + label + '\u201d.'); $('q214Det').focus(); return; }
-    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, closeCat);
+    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat);
   }
 
   // ---------- 213-RR ----------
