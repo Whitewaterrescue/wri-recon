@@ -124,12 +124,14 @@
   }
   function fillComponents() {
     var p = plan(), cur = $('deComp').value, showAll = $('deAll').checked;
-    $('deAllBox').classList.toggle('hidden', !p.cmp.length && !p.ecy.length);
+    $('deAllBox').classList.toggle('hidden', !p.cmp.length && !p.ecy.length && !p.ecology);
     var opt = function (key, label, picked) {
       return '<option value="' + key + '"' + (key === cur ? ' selected' : '') + '>' + A.esc(label) + (picked ? ' (planned)' : '') + '</option>';
     };
     var allC = !p.cmp.length || showAll;
-    var html = '<option value="">Select…</option><optgroup label="NPREP core components">' + COMPONENTS.filter(function (c) {
+    var html = '<option value="">Select…</option>';
+    // one form per drill (Cody 2026-10-31): an Ecology drill lists the Ecology credits, NPREP only under Show all
+    if (!p.ecology || showAll) html += '<optgroup label="NPREP core components">' + COMPONENTS.filter(function (c) {
       return allC || p.cmp.indexOf(c[0]) >= 0 || /^(dpx|frp)_/.test(c[0]);
     }).map(function (c) { return opt(c[0], c[1], allC && p.cmp.indexOf(c[0]) >= 0); }).join('') + '</optgroup>';
     if (p.ecology || showAll) {
