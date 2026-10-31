@@ -113,6 +113,18 @@
       }).then(function () { emit(); return Outbox.drain(); });
     },
 
+    /** End a record's hold (see hold_until) and send it, after patching its fields
+     *  ({also_unit: true}). Resolves false only when it already uploaded (a record
+     *  waiting for a PIN or a retry is still patched). */
+    release: function (reconId, fieldsPatch) {
+      return Store.get('records', reconId).then(function (r) {
+        if (!r || r.status === 'sent') return false;
+        if (fieldsPatch) Object.keys(fieldsPatch).forEach(function (k) { r.fields[k] = fieldsPatch[k]; });
+        r.hold_until = 0;
+        return Store.put('records', r).then(function () { emit(); setTimeout(Outbox.drain, 50); return true; });
+      });
+    },
+
     discard: function (reconId) {
       return Store.photosFor(reconId).then(function (ps) {
         return Promise.all(ps.map(function (p) { return Store.del('photos', p.key); }));
@@ -183,7 +195,8 @@
       var tripOf = function (r) { return r.kind === 'vessel' && r.fields ? r.fields.trip_key : ''; };
       return due.reduce(function (p, r) {
         return p.then(function () {
-          if (stop || badInc[recInc(r)] || (r.next_try || 0) > Date.now()) { if (tripOf(r)) blockedTrip[tripOf(r)] = 1; return; }
+          // hold_until: a 214 waits on the phone while its "add to unit log?" prompt is up (wake/send-now don't clear it)
+          if (stop || badInc[recInc(r)] || (r.next_try || 0) > Date.now() || (r.hold_until || 0) > Date.now()) { if (tripOf(r)) blockedTrip[tripOf(r)] = 1; return; }
           if (tripOf(r) && blockedTrip[tripOf(r)]) return;
           return sendRecord(r, pinOf(r), device).catch(function (e) {
             if (tripOf(r)) blockedTrip[tripOf(r)] = 1;

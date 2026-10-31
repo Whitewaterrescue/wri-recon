@@ -32,7 +32,7 @@
     A.busy(btn, true, 'Saving…');
     return Outbox.enqueue(rec, []).then(function () {
       A.busy(btn, false);
-      A.toast(okMsg + (navigator.onLine ? ' Uploading…' : ' No signal: it uploads when you’re back in coverage.'));
+      if (okMsg) A.toast(okMsg + (navigator.onLine ? ' Uploading…' : ' No signal: it uploads when you’re back in coverage.'));
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
       if (after) after();
     }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message, 8000); });
@@ -102,15 +102,42 @@
   }
   function write214(who, act, at, btn, clearAct, unit, done) {   // unit: also post to the unit log (default: my own 214A only)
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
-    save({ recon_id: A.uuid(), kind: '214', incident: S.incident,
-           fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit, section: $('l214Sec').value } },
-      btn, '214 note saved.', function () {
+    // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
+    var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit ? 0 : Date.now() + ASK_MS + 2000,
+                fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit, section: $('l214Sec').value } };
+    save(rec, btn, unit ? '214 note saved to your log and the unit log.' : null, function () {
+        if (!unit) askUnit(rec.recon_id, act);
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
         $('l214Unit').checked = false; $('q214Unit').checked = false;   // every entry starts personal
         if (done) done();
         if (EMBED && window.parent !== window) try { window.parent.postMessage({ type: 'wri-214', action: 'saved', activity: act }, location.origin); } catch (e) {}
       });
+  }
+
+  // After a personal 214: "Saved to your log. Add to unit log?" with a button.
+  // Until it's answered (or ASK_MS passes) the entry is held on the phone, so
+  // the button just flips also_unit before it uploads.
+  var ASK_MS = 12000, ask = null;
+  function askUnit(id, act) {
+    endAsk(false);
+    ask = { id: id, timer: setTimeout(function () { endAsk(false); }, ASK_MS) };
+    $('l214AskTxt').innerHTML = '<b>Saved to your 214 log.</b> Add “' + A.esc(act.length > 60 ? act.slice(0, 57) + '…' : act) +
+      '” to your section’s unit log too?';
+    $('l214AskYes').disabled = false; $('l214AskYes').textContent = 'Add to unit log';
+    $('l214Ask').classList.remove('hidden');
+  }
+  function endAsk(toUnit) {   // toUnit: the button; otherwise "Just mine" / time out
+    if (!ask) return;
+    var a = ask; ask = null; clearTimeout(a.timer);
+    if (!toUnit) { $('l214Ask').classList.add('hidden'); Outbox.release(a.id); return; }
+    A.busy($('l214AskYes'), true, 'Adding…');
+    Outbox.release(a.id, { also_unit: true }).then(function (ok) {
+      A.busy($('l214AskYes'), false); $('l214Ask').classList.add('hidden');
+      A.toast(ok ? 'Added to the unit log too.' + (navigator.onLine ? ' Uploading…' : ' It uploads when you’re back in coverage.')
+                 : 'It had already uploaded to your log only. Ask your unit leader to add it.', 6000);
+      renderMine('214', $('l214List'));
+    }, function (e) { A.busy($('l214AskYes'), false); $('l214Ask').classList.add('hidden'); A.toast('Could not change it: ' + e.message, 6000); });
   }
 
   // Quick log (2026-10-31, Cody): page 1 = four big red category buttons,
@@ -161,7 +188,7 @@
     var who = pickedName($('l214Name'), $('l214Other'));
     if (!who) { A.toast('Pick your name at the top first.'); window.scrollTo(0, 0); $('l214Name').focus(); return; }
     var it = qCat.items[qPick], label = it[0].replace(/\u2026$/, ''), det = $('q214Det').value.trim();
-    if (needsDetail(it) && !det) { A.toast('Add the details for \u201c' + label + '\u201d.'); $('q214Det').focus(); return; }
+    if (needsDetail(it) && !det) { A.toast('\u201c' + label + '\u201d needs details. Type them in the Details box, then tap Log it.', 5000); $('q214Det').focus(); return; }
     write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat);
   }
 
@@ -349,7 +376,17 @@
     }
     buildQuick();
     $('q214Cats').addEventListener('click', function (e) { var b = e.target.closest('.q-cat'); if (b) openCat(Number(b.dataset.i)); });
-    $('q214Pills').addEventListener('click', function (e) { var b = e.target.closest('.q-pill'); if (!b) return; var j = Number(b.dataset.j); qPick = qPick === j ? null : j; qSync(); });
+    $('q214Pills').addEventListener('click', function (e) {
+      var b = e.target.closest('.q-pill'); if (!b) return;
+      var j = Number(b.dataset.j); qPick = qPick === j ? null : j; qSync();
+      var it = qPick !== null ? qCat.items[qPick] : null;
+      if (it && needsDetail(it) && !$('q214Det').value.trim()) {   // tell them before they tap Log it
+        A.toast('“' + it[0].replace(/…$/, '') + '” needs details. Type them in the Details box below, then tap Log it.', 5000);
+        $('q214Det').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+    $('l214AskYes').addEventListener('click', function () { endAsk(true); });
+    $('l214AskNo').addEventListener('click', function () { endAsk(false); });
     $('q214Back').addEventListener('click', closeCat);
     $('q214Submit').addEventListener('click', submitQuick);
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
