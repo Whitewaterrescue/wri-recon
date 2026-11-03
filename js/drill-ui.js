@@ -1,4 +1,5 @@
 /* WRI field app (offline) — the Drill Eval tab (2026-10-30).
+ * 2026-11-02: each component / credit shows what NPREP / Ecology want in the note (PROMPTS), with a "start from prompts" button.
  * 2026-10-31: the component list follows the Drill setup picks (incident drill_components / drill_ecy), Washington Ecology
  *   credits on Ecology drills (item_key ecy_<code>), "Show all" for the rest.
  *
@@ -114,6 +115,78 @@
     ['5.D1', 'Oiled-wildlife equipment deployed']
   ];
 
+  // What each reviewer wants in the comment (Cody 2026-11-02: prompt evaluators so a note earns the credit).
+  // ECY lines follow the "Credit:" text of Ecology's 2021 self-certified checklist; NPREP lines the BNSF PREP form.
+  var PROMPTS = {
+    notifications: ['Who was notified (BNSF SID, NRC, state EMD, internal team)', 'Time of each call, number used, who made it',
+      'Case / ticket number received', 'Real call or simulated on the 201'],
+    staff_mobilization: ['Number of people and companies', 'ICS positions filled', 'Call-out time, where from, on-scene time',
+      'Point to the sign-in / 205A'],
+    ics: ['ICS positions filled (IC / UC, OSC, Safety, groups / task forces)', 'Forms used (201, 205, 214, HASP)',
+      'Briefings held and when', 'Agency representatives in the structure'],
+    source_control: ['How the release would be stopped (plug, patch, valve, transfer)', 'Who did it and with what equipment',
+      'Demonstrated or talked through'],
+    assessment: ['Product and size (scenario)', 'How it was assessed: recon, drone, air monitoring, gauge / flow',
+      'Spill trajectory / ETA to the strategy', 'How the assessment set the tactics'],
+    containment: ['Boom type and feet deployed', 'Strategy (GRP code), angle, anchors', 'Conditions (flow, wind, temperature)',
+      'Photo numbers'],
+    recovery: ['Skimmer / recovery device and storage capacity', 'How product moves to storage', 'Photo numbers'],
+    protection: ['GRP strategy code + name', 'Resource protected', 'Boom feet vs the strategy sheet; as written or modified (why)'],
+    disposal: ['Where recovered product / waste would go', 'Storage, transfer and disposal plan', 'Decon'],
+    communications: ['205 plan used', 'Equipment, system and channels (e.g. VHF Ch 68, PTT, cell)', 'Who talked to whom; any problems'],
+    transportation: ['How people and equipment got there (trucks, trailers, boats)', 'Launch / staging points, access issues'],
+    personnel_support: ['PPE, food, water, rest, warming', 'Medical plan / 206, decon'],
+    equipment: ['Pre-use checks and maintenance', 'Failures and fixes', 'Fuel / power'],
+    procurement: ['What was ordered or sourced (213RR)', 'Vendor, time called, ETA'],
+    documentation: ['Forms completed (201, 205, 214, HASP, sign-in)', 'Who kept the timeline and photos'],
+    dpx_A: ['How the response was organized and led', 'Briefing held and when', 'Assignments given'],
+    dpx_B: ['Key equipment types from the plan deployed and operated', 'Feet of boom / counts', 'Photo numbers'],
+    frp_A: ['The people who normally run the equipment operated it', 'PPE worn'],
+    frp_B: ['Equipment worked and suited the environment', 'Operated, not just staged; any failures'],
+    'ecy_1.1': ['Internal response team notified per the plan', 'Who, when, how (notification form or 214)'],
+    'ecy_1.2': ['Whole response organization notified: PRC, spill management team, wildlife provider', 'Who and when',
+      'Notification form or 214'],
+    'ecy_1.3': ['Government notifications (NRC, WA EMD) and times', 'NRC / EMD incident number'],
+    'ecy_5.A1': ['ALL in one drill: Safety Officer named', 'Site safety assessed + staging area / home base',
+      'Conditions checked and equipment suits them', 'Air monitoring readings and time', 'Hazard worksheet (HASP)',
+      'Safety briefing time; photo of the briefing'],
+    'ecy_5.A2': ['Team from the plan mobilized: where from, on-scene time', 'Positions (sign-in or 205A with positions)'],
+    'ecy_5.A3': ['Number AND affiliation of personnel', 'Responders vs observers / evaluators',
+      'PPE and training suited to the conditions'],
+    'ecy_5.A5': ['Plan holder comms equipment field-tested per the plan', 'Equipment, system and channels used; radio checks',
+      'Photo of people using comms'],
+    'ecy_5.A6': ['Plan holder (e.g. BNSF) to contractor comms during deployment', 'Who, and by what (cell, radio channel)',
+      'Photo of people using comms'],
+    'ecy_5.A7': ['Spill-tracking / limited-visibility tracking devices deployed', 'Type and where; photos'],
+    'ecy_5.B1': ['Which went in: boom, recovery, interim storage (each one)', 'Type, WRRL / ID numbers, feet of boom',
+      'Photo of each operation with what was done'],
+    'ecy_5.B2': ['Plan holder\'s OWN boom only (not the contractor\'s)', 'Type, feet, WRRL / ID; photos'],
+    'ecy_5.B3': ['Plan holder\'s OWN recovery equipment only', 'Skimmer type, WRRL / ID; photos'],
+    'ecy_5.B4': ['Non-floating oils: who was called and when', 'How long until resources are on site (log on the 201)'],
+    'ecy_5.B5': ['Transfer from skimmer / interim storage to shoreside storage (vac truck, tank)', 'Set-up, WRRL / ID; photos'],
+    'ecy_5.B6': ['Land spill kept out of water: channel, divert or berm', 'Recovery and storage', 'Resources and staging; sketch or photos'],
+    'ecy_5.B7': ['Damage control (plug / patch) walked through', 'Resources on hand, or when they could arrive; photos'],
+    'ecy_5.B9': ['Multiple tactics, vessels of opportunity, multiple operational periods', 'Not normally self-certified'],
+    'ecy_5.C1': ['GRP short AND long name, strategy type', 'Feet of boom vs the strategy sheet; who deployed (plan holder / PRC)',
+      'As written, or modified and why (conditions, changes)', 'What it takes to keep it in place 24 hours'],
+    'ecy_5.D1': ['Oiled-wildlife equipment deployed', 'Permitted handler or volunteers present', 'Not normally self-certified']
+  };
+
+  function showTip() {
+    var lines = PROMPTS[$('deComp').value] || [];
+    $('deTip').classList.toggle('hidden', !lines.length);
+    $('deTip').innerHTML = lines.length ? '<b>Cover:</b><br>• ' + lines.map(A.esc).join('<br>• ') +
+      '<br><button type="button" class="link" id="deTipUse">Start the note from these prompts</button>' : '';
+    $('deObsNote').placeholder = lines.length ? 'Cover: ' + lines.join('; ') : '';
+    var use = $('deTipUse');
+    if (use) use.onclick = function () {
+      var t = $('deObsNote');
+      if (t.value.trim() && !confirm('Replace what you wrote with the prompt outline?')) return;
+      t.value = lines.map(function (l) { return l + ': '; }).join('\n');
+      t.focus();
+    };
+  }
+
   // What the admin's Drill setup picked for the incident (Cody 2026-10-31): only the picked NPREP components (+ the
   // DPX / FRP objectives) and, on an Ecology drill, only the picked Ecology credits are listed; "Show all" lists
   // every one. Nothing picked = everything, as before.
@@ -140,6 +213,7 @@
         .map(function (c) { return opt('ecy_' + c[0], 'ECY ' + c[0] + ' ' + c[1], allE && p.ecy.indexOf(c[0]) >= 0); }).join('') + '</optgroup>';
     }
     $('deComp').innerHTML = html;
+    showTip();
   }
 
   function boot() {
@@ -147,6 +221,7 @@
     if (!$('deSave')) return;
     fillComponents();
     $('deAll').addEventListener('change', fillComponents);
+    $('deComp').addEventListener('change', showTip);
     window.addEventListener('incident:changed', fillComponents);
     $('deHot').innerHTML = HOT.map(function (h, i) { return '<button type="button" data-val="' + h[0] + '"' + (i ? '' : ' class="active"') + '>' + h[1] + '</button>'; }).join('');
     $('deMode').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showMode(b.dataset.val); });
