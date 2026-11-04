@@ -88,7 +88,32 @@
     S.incident = r ? { incident_id: r.incident_id, project_key: r.project_key, client_name: r.client_name, incident_name: r.incident_name || r.project_key } : null;
     window.dispatchEvent(new Event('incident:changed'));
     if (r) lsSet('wri_recon_incident', r.incident_id);
+    if (r) lsSet('wri_recon_incident_label', JSON.stringify({ id: r.incident_id, label: r.project_key + ' · ' + r.client_name }));
     $('incidentHint').textContent = r ? 'Files to ' + r.project_key + ' (' + r.client_name + ').' : '';
+  }
+
+  /**
+   * 2026-11-04 (batch 7, Sam run 2): the Incident box was blank until the lists loaded. Show the crew's
+   * pick right away: the Field App's choice (wri_incident_choice: id, key, name, client) or the label this
+   * phone last showed for that id. The choice also stands in as the incident until the lists arrive, so an
+   * entry can be saved on a first open with no signal (the server still refuses anything not open).
+   */
+  function showPendingIncident() {
+    var sel = $('incidentSel');
+    if (S.incident || sel.options.length) return;
+    var want = String(wantedIncident() || ''), c = null, label = '';
+    try { c = JSON.parse(lsGet('wri_incident_choice') || 'null'); } catch (e) {}
+    if (c && c.id && c.expires > Date.now() && String(c.id) === want && c.key) {
+      label = c.key + (c.client ? ' · ' + String(c.client).toUpperCase() : '');
+      S.incident = { incident_id: String(c.id), project_key: String(c.key), client_name: String(c.client || '').toUpperCase(), incident_name: String(c.name || c.key) };
+    } else {
+      try { var l = JSON.parse(lsGet('wri_recon_incident_label') || 'null'); if (want && l && String(l.id) === want) label = l.label; } catch (e) {}
+    }
+    var o = document.createElement('option');
+    o.value = S.incident ? S.incident.incident_id : ''; o.textContent = label ? label : 'Loading the incident…';
+    sel.appendChild(o);
+    $('incidentHint').textContent = label ? 'Files to ' + label + '. Loading the lists…' : 'Loading the incident list…';
+    if (S.incident) window.dispatchEvent(new Event('incident:changed'));
   }
 
   // ---------- location ----------
@@ -500,6 +525,7 @@
     window.addEventListener('focus', kick);
     setInterval(function () { if (document.visibilityState === 'visible') kick(); }, 30000);
 
+    showPendingIncident();
     takeChecklistTicks();
     loadConfig().then(function () {
       S.booted = true;

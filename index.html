@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-04-1">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-05-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -126,6 +126,8 @@
     <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
     <!-- shared phone (Jordan walkthrough 2026-11-04): say whose log this is, every time -->
     <div class="who214 hidden" id="l214Who"><span id="l214WhoTxt"></span><button type="button" class="link" id="l214NotMe">Not you?</button></div>
+    <!-- 2026-11-04 (batch 7): a Stop work / Injury / Near miss alert: who it went to, then who acknowledged it -->
+    <div class="alert214 hidden" id="l214Alert" role="status" aria-live="polite"></div>
     <!-- the unit log entries go to, up front (Riley + Jordan 2026-11-04: both landed on Logistics unseen) -->
     <div class="field"><label for="l214Sec">My unit log</label><select id="l214Sec">
       <option value="">Auto (my section on the work chart)</option><option value="command">Command</option>
@@ -135,6 +137,9 @@
     <!-- page 1: four category buttons; page 2: that category's activities + Log it -->
     <div id="q214Home">
       <div class="q-cats" id="q214Cats"></div>
+      <!-- 2026-11-04 (batch 7, Sam run 2): today's entries right under the buttons, with their upload status -->
+      <div class="sub-title" id="l214MineTitle">My entries today</div>
+      <div id="l214List"></div>
       <div class="sub-title">Or write your own</div>
       <div class="field"><label for="l214Pos">ICS position (optional)</label><input id="l214Pos" placeholder="e.g. Div A Supervisor"></div>
       <div class="field"><label for="l214Time">When</label><input type="datetime-local" id="l214Time"></div>
@@ -142,8 +147,6 @@
       <label class="check"><input type="checkbox" id="l214Unit"> Also post to the unit log</label>
       <div class="hint">Saves to your own log (ICS 214A). Tick to also post it to your section&rsquo;s unit log (ICS 214).</div>
       <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
-      <div class="sub-title">My notes on this phone</div>
-      <div id="l214List"></div>
     </div>
     <div id="q214Page" class="hidden">
       <button class="q-back" id="q214Back" type="button">&lsaquo; Categories</button>
@@ -316,19 +319,30 @@
   <div class="toast hidden" id="toast"></div>
   <!-- after a personal 214: "Add to unit log?" (js/forms-ui.js askUnit) -->
   <div class="ask hidden" id="l214Ask"><div id="l214AskTxt"></div>
-    <div class="ask-btns"><button class="btn btn-save" id="l214AskYes" type="button">Add to unit log</button><button class="btn btn-ghost" id="l214AskNo" type="button">Just mine</button></div></div>
+    <div class="ask-btns"><button class="btn btn-save" id="l214AskYes" type="button">Add to unit log</button><button class="btn btn-ghost" id="l214AskNo" type="button">Just mine</button></div>
+    <button class="btn btn-ghost ask-off" id="l214AskOff" type="button">Just mine, don&rsquo;t ask again today</button></div>
+
+  <!-- 2026-11-04 (batch 7): Stop work / Injury / Near miss alert the IC and Safety Officer: confirm first (a thumb scroll can land on them) -->
+  <div class="overlay hidden" id="urgOverlay">
+    <div class="box urg-box">
+      <div class="urg-title" id="urgTitle">Send STOP WORK alert?</div>
+      <div class="urg-msg" id="urgMsg"></div>
+      <button class="btn urg-send" id="urgSend" type="button">Send alert</button>
+      <button class="btn btn-ghost urg-cancel" id="urgCancel" type="button">Cancel</button>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-04-1"></script>
-  <script src="js/store.js?v=2026-11-04-1"></script>
-  <script src="js/api.js?v=2026-11-04-1"></script>
-  <script src="js/outbox.js?v=2026-11-04-1"></script>
-  <script src="js/forms.js?v=2026-11-04-1"></script>
-  <script src="js/app.js?v=2026-11-04-1"></script>
-  <script src="js/forms-ui.js?v=2026-11-04-1"></script>
-  <script src="js/dronemeta.js?v=2026-11-04-1"></script>
-  <script src="js/drone-ui.js?v=2026-11-04-1"></script>
-  <script src="js/drill-ui.js?v=2026-11-04-1"></script>
+  <script src="js/config.js?v=2026-11-05-1"></script>
+  <script src="js/store.js?v=2026-11-05-1"></script>
+  <script src="js/api.js?v=2026-11-05-1"></script>
+  <script src="js/outbox.js?v=2026-11-05-1"></script>
+  <script src="js/forms.js?v=2026-11-05-1"></script>
+  <script src="js/app.js?v=2026-11-05-1"></script>
+  <script src="js/forms-ui.js?v=2026-11-05-1"></script>
+  <script src="js/dronemeta.js?v=2026-11-05-1"></script>
+  <script src="js/drone-ui.js?v=2026-11-05-1"></script>
+  <script src="js/drill-ui.js?v=2026-11-05-1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

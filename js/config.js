@@ -24,7 +24,8 @@ var CONFIG = {
   // Page 1 = the categories (big buttons; icon keys are drawn in forms-ui.js, color = a .qc-<color> class in app.css).
   // Page 2 = the activities as pills: [label, emoji, color go | info | warn | alert | idle, 'urgent'?].
   // 'urgent' (2026-11-04, Jordan walkthrough): a big red button above the pills; it always goes to the
-  // Safety unit log as well as the person's own log.
+  // Safety unit log as well as the person's own log. 2026-11-04 (batch 7): the 5th value is the alert kind
+  // the server sends to the IC and Safety Officer (Logistics SafetyAlert.js): stop_work | injury | near_miss.
   QUICK_214: [
     { group: 'Arrive / Depart', icon: 'truck', color: 'blue', items: [
       ['Departed for site', '🚗', 'info'], ['Arrived on scene', '📍', 'go'], ['Checked in at ICP / staging', '📋', 'go'],
@@ -33,7 +34,7 @@ var CONFIG = {
     { group: 'Safety', icon: 'hardhat', color: 'orange', items: [
       ['Safety briefing / tailgate held', '🦺', 'go'], ['JSA reviewed with crew', '📝', 'go'], ['PPE checked', '🧤', 'go'],
       ['Work zone set up', '🚧', 'go'], ['Air monitoring reading…', '🌬️', 'info'], ['Decon set up', '🚿', 'go'],
-      ['Decon complete', '✅', 'go'], ['Stop work…', '✋', 'alert', 'urgent'], ['Injury reported…', '🩹', 'alert', 'urgent'], ['Near miss…', '⚠️', 'warn', 'urgent']] },
+      ['Decon complete', '✅', 'go'], ['Stop work…', '✋', 'alert', 'urgent', 'stop_work'], ['Injury reported…', '🩹', 'alert', 'urgent', 'injury'], ['Near miss…', '⚠️', 'warn', 'urgent', 'near_miss']] },
     { group: 'Response', icon: 'waves', color: 'red', items: [
       ['Site assessment started', '🔍', 'info'], ['Site assessment complete', '✅', 'go'], ['Boom deployed…', '〰️', 'go'],
       ['Boom checked / adjusted', '🔧', 'info'], ['Boom recovered', '↩️', 'idle'], ['Skimmer deployed', '⚙️', 'go'],
