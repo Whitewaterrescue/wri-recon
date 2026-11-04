@@ -100,16 +100,24 @@
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
     write214(who, act, at, $('l214Save'), true, $('l214Unit').checked);
   }
+  // Where a unit-log entry lands. "Auto" = the person's section on the work chart, Logistics when
+  // they aren't on it (lgOffline214_). Riley (2026-11-03 walkthrough) looked under Operations and
+  // never found an entry that had gone to Logistics, so say it up front.
+  function unitDest() {
+    var s = $('l214Sec');
+    return s.value ? 'the ' + s.options[s.selectedIndex].text + ' unit log'
+                   : 'the unit log of your section on the work chart (Logistics if you aren’t on the chart; pick a Section above to choose)';
+  }
   function write214(who, act, at, btn, clearAct, unit, done) {   // unit: also post to the unit log (default: my own 214A only)
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
     var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit, section: $('l214Sec').value } };
-    save(rec, btn, unit ? '214 note saved to your log and the unit log.' : null, function () {
+    save(rec, btn, unit ? '214 note saved to your log and ' + unitDest() + '.' : null, function () {
         if (!unit) askUnit(rec.recon_id, act);
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
-        $('l214Unit').checked = false; $('q214Unit').checked = false;   // every entry starts personal
+        $('l214Unit').checked = false; $('q214Unit').checked = false; $('l214Save').textContent = 'Save note';   // every entry starts personal
         if (done) done();
         if (EMBED && window.parent !== window) try { window.parent.postMessage({ type: 'wri-214', action: 'saved', activity: act }, location.origin); } catch (e) {}
       });
@@ -134,7 +142,7 @@
     A.busy($('l214AskYes'), true, 'Adding…');
     Outbox.release(a.id, { also_unit: true }).then(function (ok) {
       A.busy($('l214AskYes'), false); $('l214Ask').classList.add('hidden');
-      A.toast(ok ? 'Added to the unit log too.' + (navigator.onLine ? ' Uploading…' : ' It uploads when you’re back in coverage.')
+      A.toast(ok ? 'Added to ' + unitDest() + ' too.' + (navigator.onLine ? ' Uploading…' : ' It uploads when you’re back in coverage.')
                  : 'It had already uploaded to your log only. Ask your unit leader to add it.', 6000);
       renderMine('214', $('l214List'));
     }, function (e) { A.busy($('l214AskYes'), false); $('l214Ask').classList.add('hidden'); A.toast('Could not change it: ' + e.message, 6000); });
@@ -180,7 +188,7 @@
     var it = qCat && qPick !== null ? qCat.items[qPick] : null, b = $('q214Submit');
     $('q214DetLbl').textContent = it && needsDetail(it) ? 'Details (needed)' : 'Details (optional)';
     b.disabled = !it;
-    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') : 'Pick an activity';
+    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') + ($('q214Unit').checked ? ' (my log + unit log)' : '') : 'Pick an activity';
   }
   function submitQuick() {
     if (!qCat || qPick === null) return;
@@ -204,7 +212,7 @@
         item: item, qty: $('rrQty').value.trim() || '1', uom: $('rrUom').value.trim() || 'EA', priority: (pr && pr.val) || 'R',
         delivery: $('rrWhere').value.trim(), arrival: $('rrWhen').value.trim(), notes: $('rrNotes').value.trim(),
         requester: who, position: $('rrPos').value.trim(), at: Date.now() } },
-      $('rrSave'), 'Request saved.', function () {
+      $('rrSave'), 'Request saved. Logistics sees it on the Incident Board within about 5 minutes of uploading.', function () {
         ['rrItem', 'rrWhere', 'rrWhen', 'rrNotes'].forEach(function (id) { $(id).value = ''; }); $('rrQty').value = '1'; $('rrUom').value = 'EA';
         renderMine('rr', $('rrList'));
       });
@@ -389,6 +397,8 @@
     $('l214AskNo').addEventListener('click', function () { endAsk(false); });
     $('q214Back').addEventListener('click', closeCat);
     $('q214Submit').addEventListener('click', submitQuick);
+    $('q214Unit').addEventListener('change', qSync);   // the button says where the entry goes
+    $('l214Unit').addEventListener('change', function () { $('l214Save').textContent = this.checked ? 'Save note to my log + unit log' : 'Save note'; });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
     $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); });
