@@ -281,6 +281,20 @@
     renderPhotos(); buildTypes(); go(1);
   }
 
+  // ---------- Field App Checklist ticks (2026-11-03) ----------
+  // A ticked daily task is a 214 entry. The Checklist (/wri-field-app/panels/tasks, same origin) moves it into
+  // this outbox itself when it can load our scripts; with no signal it leaves it in wri_214_pending and we take it here.
+  function takeChecklistTicks() {
+    var pend; try { pend = JSON.parse(localStorage.getItem('wri_214_pending') || '[]'); } catch (e) { pend = []; }
+    if (!pend.length) return;
+    pend.reduce(function (p, r) {
+      return p.then(function () { return Outbox.enqueue(r, []); }).then(function () {
+        var left; try { left = JSON.parse(localStorage.getItem('wri_214_pending') || '[]'); } catch (e) { left = []; }
+        lsSet('wri_214_pending', JSON.stringify(left.filter(function (x) { return x.recon_id !== r.recon_id; })));
+      });
+    }, Promise.resolve()).catch(function () {});
+  }
+
   // ---------- PIN ----------
   // Each open incident has its own Gateway PIN (2026-10-27): the phone keeps one per
   // incident, and the prompt names the incident it is for.
@@ -453,6 +467,7 @@
     window.addEventListener('focus', kick);
     setInterval(function () { if (document.visibilityState === 'visible') kick(); }, 30000);
 
+    takeChecklistTicks();
     loadConfig().then(function () {
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
