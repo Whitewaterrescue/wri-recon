@@ -159,3 +159,18 @@ body.embed .header, body.embed .tabs, body.embed .progress, body.embed #a2hsCard
 /* whose log this is (shared phones) */
 .who214 { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border-radius: 10px; padding: 10px 12px; margin: -4px 0 12px; font-size: 15px; }
 .who214 .link { font-size: 15px; font-weight: 700; }
+/* 2026-11-04 (batch 7): "Just mine, don't ask again today" under the ask buttons */
+.ask-off { width: 100%; margin-top: 10px; min-height: 46px; font-size: 15px; }
+/* Stop work / Injury / Near miss: confirm before the IC and Safety Officer are alerted (big targets) */
+.urg-box { border: 3px solid #EC2329; gap: 14px; }
+.urg-title { font-size: 22px; font-weight: 800; color: #fff; background: #EC2329; border-radius: 8px; padding: 12px 14px; }
+.urg-msg { font-size: 16px; line-height: 1.45; }
+.urg-send { background: #EC2329; min-height: 64px; font-size: 20px; font-weight: 800; border-radius: 12px; }
+.urg-cancel { min-height: 56px; font-size: 18px; }
+/* the alert's status on the 214 tab: sent to whom, then acknowledged by whom */
+.alert214 { border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; font-size: 15px; line-height: 1.45; border: 2px solid #EC2329; background: rgba(236,35,41,.16); }
+.alert214 .a-t { font-weight: 800; font-size: 17px; margin-bottom: 4px; }
+.alert214.a-ok { border-color: var(--green); background: rgba(46,204,113,.14); }
+.alert214.a-warn { border-color: var(--amber); background: rgba(240,165,0,.14); }
+.alert214 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; margin-right: 6px; vertical-align: -2px; }
+.alert214 .a-hide { margin-top: 10px; min-height: 44px; width: 100%; }

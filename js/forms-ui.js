@@ -19,9 +19,20 @@
     a.concat(b, c).forEach(function (n) { n = String(n || '').trim(); if (n && !seen[n.toLowerCase()]) { seen[n.toLowerCase()] = 1; out.push(n); } });
     return out.sort();
   }
+  // 2026-11-04 (batch 7, Sam run 2): the Field App check-in (same origin) names the person holding the phone
+  function checkinName() {
+    try { var c = JSON.parse(A.lsGet('wri_checkin_state') || 'null'); return c && c.name ? String(c.name).trim() : ''; } catch (e) { return ''; }
+  }
+  var notMe = false;   // "Not you?" tapped: the name stays empty until they pick one
   function fillNames(sel, otherBox, otherInput, withOther) {
-    var keep = sel.value || A.lsGet('wri_recon_name') || '';
-    sel.innerHTML = '<option value="">Select…</option>' + staff().map(function (n) { return '<option>' + A.esc(n) + '</option>'; }).join('') +
+    var keep = sel.value || A.lsGet('wri_recon_name') || (notMe ? '' : checkinName()) || '';
+    var names = staff(), lc = function (n) { return n.toLowerCase(); };
+    // a name that isn't on the staff list (the check-in name, one typed under Other…) is its own choice, not "Other…"
+    if (keep && keep !== '__other__' && withOther) {
+      var hit = names.filter(function (n) { return lc(n) === lc(keep); })[0];
+      if (hit) keep = hit; else names = names.concat([keep]);
+    }
+    sel.innerHTML = '<option value="">Select…</option>' + names.map(function (n) { return '<option>' + A.esc(n) + '</option>'; }).join('') +
       (withOther ? '<option value="__other__">Other…</option>' : '');
     if (keep) { sel.value = keep; if (sel.value !== keep && withOther) { sel.value = '__other__'; otherInput.value = keep; } }
     if (otherBox) otherBox.classList.toggle('hidden', sel.value !== '__other__');
@@ -49,24 +60,29 @@
     return '<span class="s amber">Waiting to upload' + (r.last_error ? ' (' + A.esc(r.last_error) + ')' : '') + '</span>';
   }
   var rrSent = null;   // request ids already uploaded when the list first drew (no toast for those)
+  function sameDay(t) { return new Date(t).toDateString() === new Date().toDateString(); }
   function renderMine(kind, el) {
     Outbox.list().then(function (rs) {
       var all = rs.filter(function (r) { return r.kind === kind; }), mine = all, other = 0;
       if (kind === '214') {   // a shared phone: only the person logging now (Jordan 2026-11-04 saw Riley's notes)
+        all = all.filter(function (r) { return sameDay(r.created_at); });   // "My entries today" (2026-11-04, batch 7)
         var me = pickedName($('l214Name'), $('l214Other')).toLowerCase();
         mine = all.filter(function (r) { return !me || String(r.fields && r.fields.person || '').toLowerCase() === me; });
         other = all.length - mine.length;
+        $('l214MineTitle').textContent = 'My entries today' + (mine.length ? ' (' + mine.length + ')' : '');
       }
       if (kind === 'rr') {    // Riley 2026-11-04: the number never showed. Say it when it comes back.
         var sent = all.filter(function (r) { return r.status === 'sent' && r.result && r.result.request_id; });
-        if (rrSent) sent.forEach(function (r) { if (!rrSent[r.recon_id]) A.toast('Logistics has your request: ' + r.result.request_id + '.', 7000); });
+        if (rrSent) sent.forEach(function (r) { if (!rrSent[r.recon_id]) { A.toast('Logistics has your request: ' + r.result.request_id + '.', 7000); setTimeout(function () { pollRr(true); }, 4000); } });
         rrSent = {}; sent.forEach(function (r) { rrSent[r.recon_id] = 1; });
       }
       mine = mine.slice(0, 15);
       el.innerHTML = (mine.length ? mine.map(function (r) {
         return '<div class="item"><div class="t">' + A.esc(A.recordTitle(r)) + '</div><div>' + new Date(r.created_at).toLocaleString() +
-          ' · ' + A.esc(r.incident ? r.incident.project_key : '') + '</div><div>' + statusLine(r) + '</div></div>';
-      }).join('') : '<div class="hint">Nothing yet.</div>') +
+          ' · ' + A.esc(r.incident ? r.incident.project_key : '') + '</div><div>' + statusLine(r) + '</div>' +
+          (r.kind === '214' && r.fields && r.fields.urgent ? alertLine(r) : '') +
+          (r.kind === 'rr' && r.result && r.result.request_id ? rrLine(r.result.request_id) : '') + '</div>';
+      }).join('') : '<div class="hint">' + (kind === '214' ? 'Nothing logged today yet.' : 'Nothing yet.') + '</div>') +
         (other ? '<div class="hint">' + other + ' note(s) from other people on this phone are not shown.</div>' : '');
     });
   }
@@ -89,8 +105,9 @@
     if (view === '214') {
       fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderWho(); renderMine('214', $('l214List'));
       if (!$('l214Act').value.trim()) $('l214Time').value = A.localNow();   // the panel can sit open for hours
+      renderAlert();
     }
-    if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || ''; renderMine('rr', $('rrList')); }
+    if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || checkinName(); renderMine('rr', $('rrList')); pollRr(); }
     if (view === 'hasp') renderHasp();
     if (view === 'vessel') renderVessel();
     if (view === 'drone' && window.DroneUI) window.DroneUI.render();
@@ -134,16 +151,23 @@
     $('l214Who').classList.toggle('hidden', !who);
     $('l214WhoTxt').innerHTML = 'Logging as <b>' + A.esc(who) + '</b>';
   }
+  // urgent: '' or the alert kind (stop_work | injury | near_miss): the server alerts the IC + Safety Officer (2026-11-04, batch 7)
   function write214(who, act, at, btn, clearAct, unit, done, urgent) {   // unit: also post to the unit log (default: my own 214A only)
     if (urgent) unit = true;
+    var quiet = !unit && noAskToday(who);   // "Don't ask again today": personal entries go straight up
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
-    var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit ? 0 : Date.now() + ASK_MS + 2000,
+    var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
                           section: urgent ? 'safety' : $('l214Sec').value, default_section: 'operations' } };
-    save(rec, btn, urgent ? null : unit ? '214 note saved to your log and ' + unitDest() + '.' : null, function () {
-        if (urgent) A.toast('Saved to your log and the Safety unit log. This does not alert anyone: radio or call your supervisor and the Safety Officer now.', 12000);
-        if (!unit) askUnit(rec.recon_id, act);
+    if (urgent) rec.fields.urgent = urgent;
+    save(rec, btn, urgent ? null : unit ? '214 note saved to your log and ' + unitDest() + '.' : quiet ? 'Saved to your 214 log.' : null, function () {
+        if (urgent) {
+          trackAlert(rec, urgent); renderAlert();
+          A.toast(navigator.onLine ? 'Sending the ' + URG_LABEL[urgent] + ' alert to the Incident Commander and Safety Officer. Still radio them.'
+            : 'No signal: the ' + URG_LABEL[urgent] + ' alert goes out when signal returns. Radio your supervisor and the Safety Officer now.', 12000);
+        }
+        if (!unit && !quiet) askUnit(rec.recon_id, act, who);
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
         $('l214Unit').checked = false; $('q214Unit').checked = false; $('l214Save').textContent = 'Save note';   // every entry starts personal
@@ -156,9 +180,18 @@
   // Until it's answered (or ASK_MS passes) the entry is held on the phone, so
   // the button just flips also_unit before it uploads.
   var ASK_MS = 12000, ask = null;
-  function askUnit(id, act) {
+  // "Just mine, don't ask again today" (2026-11-04, batch 7): per name, per day, on this phone
+  function dayKey() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function noAskMap() { try { return JSON.parse(A.lsGet('wri_214_noask') || '{}') || {}; } catch (e) { return {}; } }
+  function noAskToday(who) { return !!who && noAskMap()[String(who).toLowerCase()] === dayKey(); }
+  function setNoAsk(who) {
+    var m = noAskMap(), today = dayKey();
+    Object.keys(m).forEach(function (k) { if (m[k] !== today) delete m[k]; });
+    m[String(who).toLowerCase()] = today; A.lsSet('wri_214_noask', JSON.stringify(m));
+  }
+  function askUnit(id, act, who) {
     endAsk(false);
-    ask = { id: id, timer: setTimeout(function () { endAsk(false); }, ASK_MS) };
+    ask = { id: id, who: who, timer: setTimeout(function () { endAsk(false); }, ASK_MS) };
     $('l214AskTxt').innerHTML = '<b>Saved to your 214 log.</b> Add “' + A.esc(act.length > 60 ? act.slice(0, 57) + '…' : act) +
       '” to your section’s unit log too?';
     $('l214AskYes').disabled = false; $('l214AskYes').textContent = 'Add to unit log';
@@ -187,7 +220,8 @@
   };
   var qCat = null, qPick = null;
   function qSvg(k) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (Q_ICONS[k] || '') + '</svg>'; }
-  function needsDetail(item) { return /\u2026$/.test(item[0]); }
+  // urgent items (Stop work, Injury, Near miss) never wait on typing: details optional (Cody 2026-11-04, batch 7)
+  function needsDetail(item) { return /\u2026$/.test(item[0]) && item[3] !== 'urgent'; }
   function buildQuick() {
     $('q214Cats').innerHTML = (CONFIG.QUICK_214 || []).map(function (g, i) {
       return '<button type="button" class="q-cat qc-' + A.esc(g.color || 'red') + '" data-i="' + i + '">' + qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span></button>';
@@ -217,6 +251,12 @@
     window.scrollTo(0, 0);
   }
   function isUrgent(it) { return !!it && it[3] === 'urgent'; }
+  function urgentKind(it) {   // config's 5th value; older configs: from the label
+    if (!isUrgent(it)) return '';
+    if (URG_LABEL[it[4]]) return it[4];
+    var l = String(it[0]).toLowerCase();
+    return /stop/.test(l) ? 'stop_work' : /injur/.test(l) ? 'injury' : 'near_miss';
+  }
   var unitForced = false;
   function qSync() {   // pill highlight, details label, submit text
     [].forEach.call($('q214Pills').children, function (b) { b.classList.toggle('sel', qPick !== null && Number(b.dataset.j) === qPick); });
@@ -237,7 +277,151 @@
     if (!who) { A.toast('Pick your name at the top first.'); window.scrollTo(0, 0); $('l214Name').focus(); return; }
     var it = qCat.items[qPick], label = it[0].replace(/\u2026$/, ''), det = $('q214Det').value.trim();
     if (needsDetail(it) && !det) { A.toast('\u201c' + label + '\u201d needs details. Type them in the Details box, then tap Log it.', 5000); $('q214Det').focus(); return; }
-    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, isUrgent(it));
+    var act = det ? label + ' \u2014 ' + det : label, kind = urgentKind(it);
+    if (kind) return confirmUrgent(kind, function (btn) {   // the IC + Safety Officer get alerted: ask first
+      var d = $('urgDet').value.trim();   // details are offered on the confirm, never required
+      write214(who, d ? label + ' \u2014 ' + d : label, Date.now(), btn, false, true, function () { closeUrg(); closeCat(); }, kind);
+    });
+    write214(who, act, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, '');
+  }
+
+  // ---------- Stop work / Injury / Near miss alerts (2026-11-04, batch 7) ----------
+  // The 214 goes through the outbox as always (it survives no signal); the server sees `urgent` and
+  // emails / texts the IC and Safety Officer (Logistics SafetyAlert.js). The phone keeps the alert ids
+  // (localStorage wri_214_alerts) and asks offline_alert_status until someone acknowledges (30 min max).
+  var URG_LABEL = { stop_work: 'STOP WORK', injury: 'INJURY', near_miss: 'NEAR MISS' };
+  var ALERT_KEY = 'wri_214_alerts', ALERT_SHOW_MS = 2 * 3600000, ALERT_POLL_MS = 30 * 60000, urgRun = null, alertPolling = false;
+  function confirmUrgent(kind, run) {
+    urgRun = run;
+    var L = URG_LABEL[kind];
+    $('urgTitle').textContent = 'Send ' + L + ' alert?';
+    $('urgMsg').innerHTML = 'This alerts the <b>Incident Commander</b> and the <b>Safety Officer</b> (email, and a text where it is set up) and logs it to your log and the Safety unit log.' +
+      (navigator.onLine ? '' : '<br><b>No signal now: the alert goes out when signal returns.</b>') + '<br>Still radio them.';
+    $('urgSend').textContent = 'Send ' + L + ' alert';
+    $('urgDet').value = $('q214Det').value.trim();
+    $('urgOverlay').classList.remove('hidden');
+  }
+  function closeUrg() { urgRun = null; $('urgOverlay').classList.add('hidden'); }
+  function alerts() { try { var a = JSON.parse(A.lsGet(ALERT_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function saveAlerts(a) { A.lsSet(ALERT_KEY, JSON.stringify(a.filter(function (x) { return Date.now() - x.at < 24 * 3600000; }).slice(-10))); }
+  function trackAlert(rec, kind) {
+    var a = alerts(); a.push({ id: rec.recon_id, kind: kind, who: rec.fields.person, at: Date.now(), inc: rec.incident && rec.incident.incident_id });
+    saveAlerts(a);
+  }
+  function alertOf(id) { return alerts().filter(function (x) { return x.id === id; })[0] || null; }
+  function currentAlert() {
+    var a = alerts().filter(function (x) { return !x.hidden && Date.now() - x.at < ALERT_SHOW_MS; });
+    return a[a.length - 1] || null;
+  }
+  function nameList(list) {
+    var n = (list || []).map(function (t) { return t.name + (t.position ? ' (' + t.position + ')' : ''); });
+    return n.length <= 1 ? n.join('') : n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1];
+  }
+  function hhmm(iso) { var d = new Date(iso); return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  var RADIO = ' Radio your supervisor and the Safety Officer now.';
+  function alertState(al, r) {   // {cls, html, done}
+    var res = r && r.status === 'sent' ? (r.result && r.result.alert) : null, ack = (al && al.ack) || (res && res.ack);
+    if (ack) return { cls: 'ok', done: true, html: '<b>Acknowledged by ' + A.esc(ack.name) + (ack.at ? ' at ' + hhmm(ack.at) : '') + '.</b>' };
+    if (!r) return { cls: 'bad', done: true, html: '<b>This alert is no longer saved on the phone.</b>' + RADIO };
+    if (r.status === 'needs_pin') return { cls: 'bad', html: '<b>Not sent yet: it is waiting for the incident PIN.</b>' + RADIO };
+    if (r.status === 'failed') return { cls: 'bad', html: '<b>The alert could not be sent</b> (' + A.esc(r.last_error || 'error') + ').' + RADIO };
+    if (r.status !== 'sent') return navigator.onLine && r.last_error !== 'No signal'
+      ? { cls: 'warn', html: '<span class="spin"></span><b>Sending the alert…</b>' + RADIO }
+      : { cls: 'bad', html: '<b>No signal: the alert goes out when signal returns.</b>' + RADIO };
+    if (!res) return { cls: 'bad', done: true, html: '<b>Saved to the Safety unit log, but no alert went out</b> (the server is not updated yet).' + RADIO };
+    var to = res.sent_to || [];
+    if (!to.length) return { cls: 'bad', done: true, html: '<b>Nobody could be alerted.</b> ' + A.esc(res.error || '') + RADIO };
+    var late = Date.now() - (r.sent_at || al.at) > ALERT_POLL_MS;
+    return { cls: 'warn', done: late, html: '<b>Alert sent to ' + A.esc(nameList(to)) + '.</b> ' +
+      (late ? 'No acknowledgement after 30 minutes.' : '<span class="spin"></span>Waiting for acknowledgement…') + ' Still radio them.' +
+      (res.not_reached && res.not_reached.length ? ' Could not reach ' + A.esc(nameList(res.not_reached)) + ' (no email or phone on file).' : '') };
+  }
+  function alertLine(r) {   // the short version in "My entries today"
+    var al = alertOf(r.recon_id), res = r.status === 'sent' && r.result && r.result.alert, ack = (al && al.ack) || (res && res.ack);
+    var t = ack ? 'Alert acknowledged by ' + ack.name + (ack.at ? ' at ' + hhmm(ack.at) : '')
+      : res && (res.sent_to || []).length ? 'Alert sent to ' + nameList(res.sent_to) + ', not acknowledged yet'
+      : r.status === 'sent' ? 'No alert went out: radio them' : 'Alert waiting to go out';
+    return '<div class="s ' + (ack ? 'green' : 'red') + '">' + A.esc(t) + '</div>';
+  }
+  function renderAlert() {
+    var al = currentAlert(), box = $('l214Alert');
+    if (!al) { box.classList.add('hidden'); return; }
+    Store.get('records', al.id).then(function (r) {
+      var t = alertState(al, r);
+      box.className = 'alert214 a-' + t.cls;
+      box.innerHTML = '<div class="a-t">' + A.esc(URG_LABEL[al.kind] || 'Safety alert') + ' · ' + hhmm(al.at) + '</div><div class="a-b">' + t.html + '</div>' +
+        (t.done ? '<button type="button" class="btn btn-ghost a-hide" data-id="' + A.esc(al.id) + '">Hide</button>' : '');
+    }).catch(function () {});
+  }
+  function gotAck(id, ack) {
+    var a = alerts(), hit = a.filter(function (x) { return x.id === id; })[0];
+    if (!hit || hit.ack) return;
+    hit.ack = { name: ack.name, at: ack.at }; saveAlerts(a);
+    A.toast('Acknowledged by ' + ack.name + (ack.at ? ' at ' + hhmm(ack.at) : '') + '.', 8000);
+    renderAlert(); if (view === '214') renderMine('214', $('l214List'));
+  }
+  function pollAlert() {   // gently: every 20 s while the app is open, until acknowledged or 30 min
+    if (alertPolling || !navigator.onLine || document.visibilityState === 'hidden') return;
+    var al = alerts().filter(function (x) { return !x.ack && Date.now() - x.at < ALERT_SHOW_MS; }).pop();
+    if (!al) return;
+    alertPolling = true;
+    Store.get('records', al.id).then(function (r) {
+      var res = r && r.status === 'sent' && r.result && r.result.alert;
+      if (!res || !(res.sent_to || []).length) return;
+      if (res.ack) return gotAck(al.id, res.ack);
+      if (Date.now() - (r.sent_at || al.at) > ALERT_POLL_MS) return;
+      return Promise.all([Outbox.pinFor(al.inc), Store.deviceId()]).then(function (a) {
+        if (!a[0]) return;
+        return Api.post('offline_alert_status', { pin: a[0], device: a[1], id: al.id, incident_id: al.inc }, 20000, CONFIG.LOGISTICS_API)
+          .then(function (d) { if (d && d.ack) gotAck(al.id, d.ack); });
+      });
+    }).catch(function () {}).then(function () { alertPolling = false; });
+  }
+
+  // ---------- request status (2026-11-04, batch 7): what Logistics has done with my requests ----------
+  var RR_KEY = 'wri_rr_status', rrPollAt = 0;
+  function rrStatus() { try { return JSON.parse(A.lsGet(RR_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function rrLine(reqId) {
+    var st = rrStatus()[reqId]; if (!st) return '';
+    var bits = [];
+    if (st.seen_at) bits.push('Logistics saw it at ' + hhmm(st.seen_at));
+    bits.push(st.label);
+    if (st.eta) bits.push('ETA ' + (/^\d{4}-\d\d-\d\dT/.test(st.eta) ? new Date(st.eta).toLocaleString() : st.eta));
+    return '<div class="s ' + (st.status === 'rejected' ? 'red' : st.status === 'new' ? 'amber' : 'green') + '">' + A.esc(bits.join(' · ')) + '</div>';
+  }
+  function pollRr(force) {
+    if (!navigator.onLine || (!force && Date.now() - rrPollAt < 60000)) return;
+    Outbox.list().then(function (rs) {
+      var byInc = {};
+      rs.forEach(function (r) {
+        if (r.kind !== 'rr' || r.status !== 'sent' || !r.result || !r.result.request_id || !r.incident) return;
+        (byInc[r.incident.incident_id] = byInc[r.incident.incident_id] || []).push(r.result.request_id);
+      });
+      if (!Object.keys(byInc).length) return;
+      rrPollAt = Date.now();
+      return Store.deviceId().then(function (device) {
+        return Promise.all(Object.keys(byInc).map(function (inc) {
+          return Outbox.pinFor(inc).then(function (pin) {
+            if (!pin) return;
+            return Api.post('offline_rr_status', { pin: pin, device: device, incident_id: inc, request_ids: byInc[inc] }, 20000, CONFIG.LOGISTICS_API).then(function (d) {
+              var m = rrStatus(), changed = false, got = (d && d.requests) || {};
+              Object.keys(got).forEach(function (id) {
+                var n = got[id], o = m[id];
+                if (!o || o.status !== n.status || o.seen_at !== n.seen_at || o.eta !== n.eta) {
+                  changed = true;
+                  if (o && n.seen_at && !o.seen_at) A.toast('Logistics saw your request ' + id + ' at ' + hhmm(n.seen_at) + '.', 7000);
+                  else if (o && o.status !== n.status) A.toast('Request ' + id + ': ' + n.label + '.', 7000);
+                }
+                n.t = Date.now(); m[id] = n;
+              });
+              Object.keys(m).forEach(function (k) { if (!(Date.now() - (m[k].t || 0) < 4 * 864e5)) delete m[k]; });
+              A.lsSet(RR_KEY, JSON.stringify(m));
+              if (changed && view === 'rr') renderMine('rr', $('rrList'));
+            });
+          });
+        }));
+      });
+    }).catch(function () {});
   }
 
   // ---------- 213-RR ----------
@@ -438,6 +622,21 @@
     $('q214Urgent').addEventListener('click', onPick);
     $('l214AskYes').addEventListener('click', function () { endAsk(true); });
     $('l214AskNo').addEventListener('click', function () { endAsk(false); });
+    $('l214AskOff').addEventListener('click', function () {
+      var who = ask && ask.who; if (who) setNoAsk(who);
+      endAsk(false);
+      if (who) A.toast('OK: no more “Add to unit log?” today for ' + who + '. Tick “Also post to the unit log” when one should go there.', 7000);
+    });
+    $('urgSend').addEventListener('click', function () { if (urgRun) urgRun(this); });
+    $('urgCancel').addEventListener('click', function () { closeUrg(); A.toast('Not sent.'); });
+    $('l214Alert').addEventListener('click', function (e) {
+      var b = e.target.closest('.a-hide'); if (!b) return;
+      var a = alerts(); a.forEach(function (x) { if (x.id === b.dataset.id) x.hidden = true; }); saveAlerts(a); renderAlert();
+    });
+    setInterval(pollAlert, 20000);
+    setInterval(function () { if (view === 'rr' && document.visibilityState === 'visible') pollRr(); }, 60000);
+    window.addEventListener('online', function () { renderAlert(); setTimeout(pollAlert, 3000); });
+    window.addEventListener('offline', renderAlert);
     $('q214Back').addEventListener('click', closeCat);
     $('q214Submit').addEventListener('click', submitQuick);
     $('q214Unit').addEventListener('change', qSync);   // the button says where the entry goes
@@ -449,7 +648,7 @@
     $('l214Other').addEventListener('change', function () { renderWho(); renderMine('214', $('l214List')); });
     $('l214Sec').addEventListener('change', function () { A.lsSet('wri_214_section', this.value); renderDest(); qSync(); });
     $('l214NotMe').addEventListener('click', function () {   // hand-off on a shared phone: pick the right name first
-      A.lsSet('wri_recon_name', ''); $('l214Name').value = ''; $('l214Other').value = ''; $('l214OtherBox').classList.add('hidden');
+      notMe = true; A.lsSet('wri_recon_name', ''); $('l214Name').value = ''; $('l214Other').value = ''; $('l214OtherBox').classList.add('hidden');
       renderWho(); renderMine('214', $('l214List')); $('l214Name').focus();
     });
     $('l214Save').addEventListener('click', save214);
@@ -480,7 +679,7 @@
     $('disOk').addEventListener('click', disembark);
     $('vReturn').addEventListener('click', returnTrip);
     window.addEventListener('incident:changed', function () { openHasp = null; render(); });
-    window.addEventListener('outbox:changed', function () { if (view === '214') renderMine('214', $('l214List')); if (view === 'rr') renderMine('rr', $('rrList')); });
+    window.addEventListener('outbox:changed', function () { if (view === '214') { renderMine('214', $('l214List')); renderAlert(); } if (view === 'rr') renderMine('rr', $('rrList')); });
 
     Store.kvGet('vessel_trip').then(function (t) { trip = t || null; render(); });
     [].forEach.call($('tabs').children, function (b) { b.classList.toggle('hidden', !tabOn(b.dataset.view)); });
@@ -492,6 +691,6 @@
     window.addEventListener('online', refreshCfg);
     showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
   }
-  window.WRIForms = { showView: function (v) { showView(v); } };
+  window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); } };
   document.addEventListener('DOMContentLoaded', boot);
 })();
