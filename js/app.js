@@ -103,16 +103,20 @@
       if (from !== 'map') map.setView(ll, Math.max(map.getZoom(), 15));
     }
   }
+  var POOR_GPS_M = 50;
   function gps() {
     var b = $('gpsBtn');
     if (!navigator.geolocation) { toast('This phone has no GPS access. Type the coordinates.'); return; }
     busy(b, true, 'Getting location…');
     navigator.geolocation.getCurrentPosition(function (p) {
-      busy(b, false); b.classList.add('ok'); b.textContent = 'Location captured ✓ (tap to refresh)';
+      var poor = p.coords.accuracy > POOR_GPS_M;
+      busy(b, false); b.classList.toggle('ok', !poor);
+      b.textContent = poor ? 'Weak GPS fix (± ' + Math.round(p.coords.accuracy) + ' m): tap to try again' : 'Location captured ✓ (tap to refresh)';
       setLoc(p.coords.latitude, p.coords.longitude, p.coords.accuracy, 'gps');
+      if (poor) toast('GPS is only good to ± ' + Math.round(p.coords.accuracy) + ' m. Step into the open and tap again, or tap the exact spot on the map.', 8000);
     }, function (e) {
       busy(b, false); toast('No GPS fix (' + e.message + '). Step outside, try again, or type the coordinates.', 6000);
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: S.acc > POOR_GPS_M ? 0 : 10000 });   // after a weak fix, a fresh one, not the cached
   }
   function typed() {
     var la = parseFloat($('lat').value), lo = parseFloat($('lon').value);
@@ -217,6 +221,8 @@
   }
   function go(n) {
     S.step = n;
+    if (!S.timeSet) $('obsTime').value = localNow();   // untouched: keep it "now"
+    saveDraft();
     [].forEach.call(document.querySelectorAll('.step'), function (s) { s.classList.toggle('active', Number(s.dataset.step) === n); });
     $('progressFill').style.width = (n / TOTAL * 100) + '%';
     $('backBtn').classList.toggle('hidden', n === 1);
@@ -230,12 +236,12 @@
     var t = typeObj(S.type) || {}, row = function (k, v) { return v ? '<div class="r"><div class="k">' + esc(k) + '</div><div>' + esc(v) + '</div></div>' : ''; };
     $('review').innerHTML =
       row('Incident', S.incident ? S.incident.project_key + ' · ' + S.incident.client_name : '') +
-      row('When', $('obsTime').value.replace('T', ' ')) +
+      row('When', S.timeSet ? $('obsTime').value.replace('T', ' ') : 'When you tap Save') +
       row('Reporter', reporterName() + (S.isWri === 'no' && $('extAff').value ? ' (' + $('extAff').value + ')' : '')) +
       row('Type', (t.label || S.type) + (S.sub ? ' — ' + S.sub : '')) +
       row('Description', $('desc').value) +
       row('Task force', $('tfName').value + ($('tfStatus').value ? ' (' + $('tfStatus').value + ')' : '')) +
-      row('Location', S.lat != null ? S.lat.toFixed(6) + ', ' + S.lon.toFixed(6) + (S.acc != null ? ' ± ' + S.acc + ' m' : '') : '') +
+      row('Location', S.lat != null ? S.lat.toFixed(6) + ', ' + S.lon.toFixed(6) + (S.acc != null ? ' ± ' + S.acc + ' m' + (S.acc > POOR_GPS_M ? ' (weak fix: check it on the map)' : '') : '') : '') +
       row('Photos', String(S.photos.length));
   }
 
@@ -243,7 +249,7 @@
     for (var i = 1; i < TOTAL; i++) { var m = check(i); if (m) { toast(m); go(i); return; } }
     var b = $('saveBtn'); busy(b, true, 'Saving…');
     var t = typeObj(S.type) || {};
-    var when = $('obsTime').value ? new Date($('obsTime').value).getTime() : Date.now();
+    var when = S.timeSet && $('obsTime').value ? new Date($('obsTime').value).getTime() : Date.now();
     var rec = {
       recon_id: uuid(),
       incident: S.incident,
@@ -260,6 +266,7 @@
     var droneGroup = S.droneGroup;
     Outbox.enqueue(rec, S.photos.map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta || '' }; })).then(function () {
       busy(b, false);
+      lsSet(DRAFT_KEY, '');   // saved: nothing left to pick up
       if (droneGroup) window.dispatchEvent(new CustomEvent('recon:saved', { detail: { recon_id: rec.recon_id, drone_group: droneGroup } }));
       $('doneTitle').textContent = 'Saved on this phone';
       $('doneSub').textContent = navigator.onLine ? 'Uploading now…' : 'No signal: it uploads by itself when you’re back in coverage. Open Recon then.';
@@ -269,8 +276,30 @@
       busy(b, false); toast('Could not save on this phone: ' + e.message + '. Free up storage and try again.', 8000);
     });
   }
+  var DRAFT_KEY = 'wri_recon_draft', DRAFT_MS = 12 * 3600 * 1000;
+  var DRAFT_IDS = ['desc', 'tfName', 'tfStatus', 'extName', 'extAff', 'affDesc', 'obsTime'];
+  function saveDraft() {
+    if (!S.booted) return;
+    var d = { at: Date.now(), step: S.step, lat: S.lat, lon: S.lon, acc: S.acc, cat: S.cat, type: S.type, sub: S.sub, isWri: S.isWri, timeSet: !!S.timeSet,
+              incident: S.incident ? S.incident.incident_id : '', v: {} };
+    DRAFT_IDS.forEach(function (id) { d.v[id] = $(id).value; });
+    var empty = d.lat == null && !d.type && !d.v.desc && !d.v.tfName;
+    lsSet(DRAFT_KEY, empty ? '' : JSON.stringify(d));
+  }
+  function restoreDraft() {
+    var d; try { d = JSON.parse(lsGet(DRAFT_KEY) || 'null'); } catch (e) { d = null; }
+    if (!d || Date.now() - d.at > DRAFT_MS || (d.incident && S.incident && d.incident !== S.incident.incident_id)) return;
+    DRAFT_IDS.forEach(function (id) { if (d.v[id] != null) $(id).value = d.v[id]; });
+    S.timeSet = d.timeSet; if (d.isWri) setWri(d.isWri);
+    if (d.cat) { S.cat = d.cat; buildCats(); }
+    S.type = d.type || null; S.sub = d.sub || null; buildTypes();
+    if (d.lat != null) setLoc(d.lat, d.lon, d.acc, 'restore');
+    go(Math.min(d.step || 1, TOTAL));
+    toast('Picked up your unsaved point where you left off' + (S.photos.length ? '' : ' (add the photos again)') + '.', 6000);
+  }
   function resetForm() {
     $('doneOverlay').classList.add('hidden');
+    lsSet(DRAFT_KEY, ''); S.timeSet = false;
     S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
     S.photos = []; S.type = null; S.sub = null; S.lat = null; S.lon = null; S.acc = null;
     S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null;
@@ -279,6 +308,7 @@
     if (marker && map) { map.removeLayer(marker); marker = null; }
     $('obsTime').value = localNow();
     renderPhotos(); buildTypes(); go(1);
+    lsSet(DRAFT_KEY, '');
   }
 
   // ---------- Field App Checklist ticks (2026-11-03) ----------
@@ -433,6 +463,9 @@
     $('nextBtn').addEventListener('click', function () { var m = check(S.step); if (m) { toast(m); return; } go(S.step + 1); });
     $('backBtn').addEventListener('click', function () { go(Math.max(1, S.step - 1)); });
     $('saveBtn').addEventListener('click', save);
+    $('obsTime').addEventListener('change', function () { S.timeSet = true; saveDraft(); });
+    $('steps').addEventListener('change', saveDraft);
+    $('steps').addEventListener('click', function () { setTimeout(saveDraft, 0); });
     $('newBtn').addEventListener('click', resetForm);
     $('pinBtn').addEventListener('click', submitPin);
     $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitPin(); });
@@ -469,6 +502,8 @@
 
     takeChecklistTicks();
     loadConfig().then(function () {
+      S.booted = true;
+      if (!/[?&]embed=214/.test(location.search)) restoreDraft();
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);
@@ -487,7 +522,7 @@
     if (marker && map) { map.removeLayer(marker); marker = null; }
     if (o.lat != null) { setLoc(o.lat, o.lon, null, 'drone'); $('coords').textContent += '  (from the drone photos: tap the map to move it)'; }
     else { $('coords').textContent = 'No location in these photos: tap the map, use GPS or type it'; $('lat').value = ''; $('lon').value = ''; }
-    if (o.when) { var d = new Date(o.when); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('obsTime').value = d.toISOString().slice(0, 16); }
+    if (o.when) { var d = new Date(o.when); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('obsTime').value = d.toISOString().slice(0, 16); S.timeSet = true; }
     renderPhotos(); go(1);
   }
 

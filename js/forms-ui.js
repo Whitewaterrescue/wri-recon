@@ -38,19 +38,36 @@
     }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message, 8000); });
   }
   function statusLine(r) {
+    if (r.status === 'sent' && r.kind === '214') {   // a personal entry is only on your log (Jordan 2026-11-04 read "Logistics log")
+      var sec = r.result && r.result.section, unit = r.fields && r.fields.also_unit;
+      return '<span class="s green">Uploaded to your log' + (unit ? ' and the ' + (sec ? A.esc(sec) + ' ' : '') + 'unit log' : '') + '</span>';
+    }
     if (r.status === 'sent') return '<span class="s green">Uploaded' + (r.result && r.result.request_id ? ' as ' + A.esc(r.result.request_id) : '') +
       (r.result && r.result.section ? ' to the ' + A.esc(r.result.section) + ' log' : '') + '</span>';
     if (r.status === 'needs_pin') return '<span class="s red">Waiting for the incident PIN</span>';
     if (r.status === 'failed') return '<span class="s red">' + A.esc(r.last_error || 'Could not upload') + '</span>';
     return '<span class="s amber">Waiting to upload' + (r.last_error ? ' (' + A.esc(r.last_error) + ')' : '') + '</span>';
   }
+  var rrSent = null;   // request ids already uploaded when the list first drew (no toast for those)
   function renderMine(kind, el) {
     Outbox.list().then(function (rs) {
-      var mine = rs.filter(function (r) { return r.kind === kind; }).slice(0, 15);
-      el.innerHTML = mine.length ? mine.map(function (r) {
+      var all = rs.filter(function (r) { return r.kind === kind; }), mine = all, other = 0;
+      if (kind === '214') {   // a shared phone: only the person logging now (Jordan 2026-11-04 saw Riley's notes)
+        var me = pickedName($('l214Name'), $('l214Other')).toLowerCase();
+        mine = all.filter(function (r) { return !me || String(r.fields && r.fields.person || '').toLowerCase() === me; });
+        other = all.length - mine.length;
+      }
+      if (kind === 'rr') {    // Riley 2026-11-04: the number never showed. Say it when it comes back.
+        var sent = all.filter(function (r) { return r.status === 'sent' && r.result && r.result.request_id; });
+        if (rrSent) sent.forEach(function (r) { if (!rrSent[r.recon_id]) A.toast('Logistics has your request: ' + r.result.request_id + '.', 7000); });
+        rrSent = {}; sent.forEach(function (r) { rrSent[r.recon_id] = 1; });
+      }
+      mine = mine.slice(0, 15);
+      el.innerHTML = (mine.length ? mine.map(function (r) {
         return '<div class="item"><div class="t">' + A.esc(A.recordTitle(r)) + '</div><div>' + new Date(r.created_at).toLocaleString() +
           ' · ' + A.esc(r.incident ? r.incident.project_key : '') + '</div><div>' + statusLine(r) + '</div></div>';
-      }).join('') : '<div class="hint">Nothing yet.</div>';
+      }).join('') : '<div class="hint">Nothing yet.</div>') +
+        (other ? '<div class="hint">' + other + ' note(s) from other people on this phone are not shown.</div>' : '');
     });
   }
 
@@ -70,7 +87,7 @@
   }
   function render() {
     if (view === '214') {
-      fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderMine('214', $('l214List'));
+      fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderWho(); renderMine('214', $('l214List'));
       if (!$('l214Act').value.trim()) $('l214Time').value = A.localNow();   // the panel can sit open for hours
     }
     if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || ''; renderMine('rr', $('rrList')); }
@@ -100,20 +117,32 @@
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
     write214(who, act, at, $('l214Save'), true, $('l214Unit').checked);
   }
-  // Where a unit-log entry lands. "Auto" = the person's section on the work chart, Logistics when
-  // they aren't on it (lgOffline214_). Riley (2026-11-03 walkthrough) looked under Operations and
-  // never found an entry that had gone to Logistics, so say it up front.
-  function unitDest() {
-    var s = $('l214Sec');
-    return s.value ? 'the ' + s.options[s.selectedIndex].text + ' unit log'
-                   : 'the unit log of your section on the work chart (Logistics if you aren’t on the chart; pick a Section above to choose)';
+  // Where a unit-log entry lands. "Auto" = the person's section on the work chart, Operations when
+  // they aren't on it (lgOffline214_ default_section). Riley and Jordan (2026-11-03/04 walkthroughs)
+  // both had entries land on Logistics unseen, so it's picked at the top and said up front.
+  // Urgent safety events (Stop work, Injury, Near miss) always go to the Safety unit log.
+  var SEC_NAMES = { command: 'Command', operations: 'Operations', planning: 'Planning', logistics: 'Logistics', finance: 'Finance', safety: 'Safety' };
+  function unitDest(urgent) {
+    var s = urgent ? 'safety' : $('l214Sec').value;
+    return s ? 'the ' + SEC_NAMES[s] + ' unit log' : 'your section’s unit log on the work chart (Operations if you aren’t on it)';
   }
-  function write214(who, act, at, btn, clearAct, unit, done) {   // unit: also post to the unit log (default: my own 214A only)
+  function renderDest() {
+    $('l214Dest').textContent = 'Unit-log entries go to ' + unitDest() + '. Stop work, injuries and near misses always go to Safety.';
+  }
+  function renderWho() {   // shared phones: say whose log this is
+    var who = pickedName($('l214Name'), $('l214Other'));
+    $('l214Who').classList.toggle('hidden', !who);
+    $('l214WhoTxt').innerHTML = 'Logging as <b>' + A.esc(who) + '</b>';
+  }
+  function write214(who, act, at, btn, clearAct, unit, done, urgent) {   // unit: also post to the unit log (default: my own 214A only)
+    if (urgent) unit = true;
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
     var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit ? 0 : Date.now() + ASK_MS + 2000,
-                fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit, section: $('l214Sec').value } };
-    save(rec, btn, unit ? '214 note saved to your log and ' + unitDest() + '.' : null, function () {
+                fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
+                          section: urgent ? 'safety' : $('l214Sec').value, default_section: 'operations' } };
+    save(rec, btn, urgent ? null : unit ? '214 note saved to your log and ' + unitDest() + '.' : null, function () {
+        if (urgent) A.toast('Saved to your log and the Safety unit log. This does not alert anyone: radio or call your supervisor and the Safety Officer now.', 12000);
         if (!unit) askUnit(rec.recon_id, act);
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
@@ -169,8 +198,12 @@
     qCat = g; qPick = null;
     $('q214Head').className = 'q-head qc-' + (g.color || 'red');
     $('q214Head').innerHTML = qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span>';
+    $('q214Urgent').innerHTML = g.items.map(function (it, j) {
+      return it[3] !== 'urgent' ? '' : '<button type="button" class="q-urg" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
+        '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
+    }).join('');
     $('q214Pills').innerHTML = g.items.map(function (it, j) {
-      return '<button type="button" class="q-pill q-' + A.esc(it[2] || 'info') + '" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
+      return it[3] === 'urgent' ? '' : '<button type="button" class="q-pill q-' + A.esc(it[2] || 'info') + '" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
         '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
     }).join('');
     $('q214Det').value = '';
@@ -183,12 +216,19 @@
     $('q214Page').classList.add('hidden'); $('q214Home').classList.remove('hidden');
     window.scrollTo(0, 0);
   }
+  function isUrgent(it) { return !!it && it[3] === 'urgent'; }
+  var unitForced = false;
   function qSync() {   // pill highlight, details label, submit text
     [].forEach.call($('q214Pills').children, function (b) { b.classList.toggle('sel', qPick !== null && Number(b.dataset.j) === qPick); });
-    var it = qCat && qPick !== null ? qCat.items[qPick] : null, b = $('q214Submit');
+    [].forEach.call($('q214Urgent').children, function (b) { b.classList.toggle('sel', qPick !== null && Number(b.dataset.j) === qPick); });
+    var it = qCat && qPick !== null ? qCat.items[qPick] : null, b = $('q214Submit'), u = $('q214Unit'), urg = isUrgent(it);
+    if (urg) { if (!u.disabled) unitForced = !u.checked; u.checked = true; u.disabled = true; }   // urgent = unit log, always
+    else if (u.disabled) { u.disabled = false; if (unitForced) u.checked = false; unitForced = false; }
+    $('q214UnitHint').textContent = urg ? 'Goes to your own log and the Safety unit log.'
+      : 'Saves to your own log (ICS 214A). Tick to also post it to ' + unitDest() + ' (ICS 214).';
     $('q214DetLbl').textContent = it && needsDetail(it) ? 'Details (needed)' : 'Details (optional)';
     b.disabled = !it;
-    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') + ($('q214Unit').checked ? ' (my log + unit log)' : '') : 'Pick an activity';
+    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') + (urg ? ' (my log + Safety)' : u.checked ? ' (my log + unit log)' : '') : 'Pick an activity';
   }
   function submitQuick() {
     if (!qCat || qPick === null) return;
@@ -197,7 +237,7 @@
     if (!who) { A.toast('Pick your name at the top first.'); window.scrollTo(0, 0); $('l214Name').focus(); return; }
     var it = qCat.items[qPick], label = it[0].replace(/\u2026$/, ''), det = $('q214Det').value.trim();
     if (needsDetail(it) && !det) { A.toast('\u201c' + label + '\u201d needs details. Type them in the Details box, then tap Log it.', 5000); $('q214Det').focus(); return; }
-    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat);
+    write214(who, det ? label + ' \u2014 ' + det : label, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, isUrgent(it));
   }
 
   // ---------- 213-RR ----------
@@ -377,22 +417,25 @@
     if (EMBED) {
       document.body.classList.add('embed'); CONFIG.TABS = ['214'];
       var nm = /[?&]name=([^&#]+)/.exec(location.search);   // the Field App's checked-in name
-      if (nm && !A.lsGet('wri_recon_name')) A.lsSet('wri_recon_name', decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim());
+      // the checked-in person is the one holding the phone: their name wins over the last user's (Jordan 2026-11-04)
+      if (nm) A.lsSet('wri_recon_name', decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim());
       window.addEventListener('message', function (e) {   // panel reopened: refresh the time and the list
         if (e.origin === location.origin && e.data && e.data.type === 'wri-214' && e.data.action === 'open') render();
       });
     }
     buildQuick();
     $('q214Cats').addEventListener('click', function (e) { var b = e.target.closest('.q-cat'); if (b) openCat(Number(b.dataset.i)); });
-    $('q214Pills').addEventListener('click', function (e) {
-      var b = e.target.closest('.q-pill'); if (!b) return;
+    var onPick = function (e) {
+      var b = e.target.closest('.q-pill, .q-urg'); if (!b) return;
       var j = Number(b.dataset.j); qPick = qPick === j ? null : j; qSync();
       var it = qPick !== null ? qCat.items[qPick] : null;
       if (it && needsDetail(it) && !$('q214Det').value.trim()) {   // tell them before they tap Log it
-        A.toast('“' + it[0].replace(/…$/, '') + '” needs details. Type them in the Details box below, then tap Log it.', 5000);
+        A.toast('“' + it[0].replace(/…$/, '') + '” needs details. Type them in the Details box, then tap Log it.', 5000);
         $('q214Det').scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
-    });
+    };
+    $('q214Pills').addEventListener('click', onPick);
+    $('q214Urgent').addEventListener('click', onPick);
     $('l214AskYes').addEventListener('click', function () { endAsk(true); });
     $('l214AskNo').addEventListener('click', function () { endAsk(false); });
     $('q214Back').addEventListener('click', closeCat);
@@ -401,7 +444,14 @@
     $('l214Unit').addEventListener('change', function () { $('l214Save').textContent = this.checked ? 'Save note to my log + unit log' : 'Save note'; });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
     $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
-    $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); });
+    renderDest();
+    $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); renderWho(); renderMine('214', $('l214List')); });
+    $('l214Other').addEventListener('change', function () { renderWho(); renderMine('214', $('l214List')); });
+    $('l214Sec').addEventListener('change', function () { A.lsSet('wri_214_section', this.value); renderDest(); qSync(); });
+    $('l214NotMe').addEventListener('click', function () {   // hand-off on a shared phone: pick the right name first
+      A.lsSet('wri_recon_name', ''); $('l214Name').value = ''; $('l214Other').value = ''; $('l214OtherBox').classList.add('hidden');
+      renderWho(); renderMine('214', $('l214List')); $('l214Name').focus();
+    });
     $('l214Save').addEventListener('click', save214);
     $('rrPri').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('rrPri', b.dataset.val); });
     $('rrSave').addEventListener('click', saveRr);
