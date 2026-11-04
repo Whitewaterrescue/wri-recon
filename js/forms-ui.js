@@ -220,7 +220,8 @@
   };
   var qCat = null, qPick = null;
   function qSvg(k) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (Q_ICONS[k] || '') + '</svg>'; }
-  function needsDetail(item) { return /\u2026$/.test(item[0]); }
+  // urgent items (Stop work, Injury, Near miss) never wait on typing: details optional (Cody 2026-11-04, batch 7)
+  function needsDetail(item) { return /\u2026$/.test(item[0]) && item[3] !== 'urgent'; }
   function buildQuick() {
     $('q214Cats').innerHTML = (CONFIG.QUICK_214 || []).map(function (g, i) {
       return '<button type="button" class="q-cat qc-' + A.esc(g.color || 'red') + '" data-i="' + i + '">' + qSvg(g.icon) + '<span>' + A.esc(g.group) + '</span></button>';
@@ -278,7 +279,8 @@
     if (needsDetail(it) && !det) { A.toast('\u201c' + label + '\u201d needs details. Type them in the Details box, then tap Log it.', 5000); $('q214Det').focus(); return; }
     var act = det ? label + ' \u2014 ' + det : label, kind = urgentKind(it);
     if (kind) return confirmUrgent(kind, function (btn) {   // the IC + Safety Officer get alerted: ask first
-      write214(who, act, Date.now(), btn, false, true, function () { closeUrg(); closeCat(); }, kind);
+      var d = $('urgDet').value.trim();   // details are offered on the confirm, never required
+      write214(who, d ? label + ' \u2014 ' + d : label, Date.now(), btn, false, true, function () { closeUrg(); closeCat(); }, kind);
     });
     write214(who, act, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, '');
   }
@@ -296,6 +298,7 @@
     $('urgMsg').innerHTML = 'This alerts the <b>Incident Commander</b> and the <b>Safety Officer</b> (email, and a text where it is set up) and logs it to your log and the Safety unit log.' +
       (navigator.onLine ? '' : '<br><b>No signal now: the alert goes out when signal returns.</b>') + '<br>Still radio them.';
     $('urgSend').textContent = 'Send ' + L + ' alert';
+    $('urgDet').value = $('q214Det').value.trim();
     $('urgOverlay').classList.remove('hidden');
   }
   function closeUrg() { urgRun = null; $('urgOverlay').classList.add('hidden'); }
