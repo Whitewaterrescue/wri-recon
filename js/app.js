@@ -335,6 +335,11 @@
     $('pinMsg').textContent = (msg || 'Enter the incident PIN. Points upload with it.') + (name ? ' (' + name + ')' : '');
     $('pinOverlay').classList.remove('hidden'); $('pinInput').value = ''; setTimeout(function () { $('pinInput').focus(); }, 50);
   }
+  // 2026-11-04 (batch 7, Casey): the prompt had no way out; entries keep waiting for the PIN on the phone
+  function cancelPin() {
+    $('pinOverlay').classList.add('hidden');
+    toast('No PIN yet: your entries stay on this phone and upload once the PIN is in. Tap My entries to add it.', 6000);
+  }
   function submitPin() {
     var pin = $('pinInput').value.trim(), b = $('pinBtn');
     if (!pin) return;
@@ -354,7 +359,7 @@
   /** Ask for the picked incident's PIN when the phone has none for it yet. */
   function ensurePinForIncident() {
     if (!S.incident) return;
-    Outbox.pinFor(S.incident.incident_id).then(function (pin) { if (!pin) askPin('Enter the Gateway PIN for this incident.'); });
+    Outbox.pinFor(S.incident.incident_id).then(function (pin) { if (!pin) askPin('Enter the incident PIN.'); });
   }
 
   // ---------- saved list + banner ----------
@@ -469,6 +474,8 @@
     $('newBtn').addEventListener('click', resetForm);
     $('pinBtn').addEventListener('click', submitPin);
     $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitPin(); });
+    $('pinCancel').addEventListener('click', cancelPin);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('pinOverlay').classList.contains('hidden')) cancelPin(); });
     $('savedBtn').addEventListener('click', function () { $('savedOverlay').classList.remove('hidden'); renderSaved(); });
     $('savedClose').addEventListener('click', function () { $('savedOverlay').classList.add('hidden'); });
     $('savedList').addEventListener('click', savedAction);
