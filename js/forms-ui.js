@@ -11,6 +11,8 @@
   var view = 'recon', trip = null, openHasp = null, sig = { drawing: false, has: false };
   // ?embed=214: the Field App's floating 214 button opens this page with only the 214 tab
   var EMBED = /[?&]embed=214(&|#|$)/.test(location.search);
+  // 2026-11-05 (batch 11): ?embed=hasp&hasp=<id>: the Field App's HASP page signs one plan here (js/hasp-embed.js)
+  var EMBED_HASP = /[?&]embed=hasp(&|#|$)/.test(location.search);
   var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
 
   function staff() {
@@ -678,7 +680,7 @@
     $('disCancel').addEventListener('click', function () { $('disOverlay').classList.add('hidden'); });
     $('disOk').addEventListener('click', disembark);
     $('vReturn').addEventListener('click', returnTrip);
-    window.addEventListener('incident:changed', function () { openHasp = null; render(); });
+    window.addEventListener('incident:changed', function () { if (!EMBED_HASP) openHasp = null; render(); });
     window.addEventListener('outbox:changed', function () { if (view === '214') { renderMine('214', $('l214List')); renderAlert(); } if (view === 'rr') renderMine('rr', $('rrList')); });
 
     Store.kvGet('vessel_trip').then(function (t) { trip = t || null; render(); });
@@ -691,6 +693,13 @@
     window.addEventListener('online', refreshCfg);
     showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
   }
-  window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); } };
+  window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); },
+    // 2026-11-05 (batch 11): open one HASP to sign (the phone's cached copy, else the Field App's stub); returns it
+    openHasp: function (id, stub) {
+      var all = [];
+      ((cfg.hasp && cfg.hasp.incidents) || []).forEach(function (i) { all = all.concat(i.hasps || []); });
+      var h = all.filter(function (x) { return String(x.objectId) === String(id); })[0] || stub;
+      showView('hasp'); openHaspDetail(h); return h;
+    } };
   document.addEventListener('DOMContentLoaded', boot);
 })();

@@ -536,7 +536,7 @@
     takeChecklistTicks();
     loadConfig().then(function () {
       S.booted = true;
-      if (!/[?&]embed=214/.test(location.search)) restoreDraft();
+      if (!/[?&]embed=(214|hasp)/.test(location.search)) restoreDraft();   // 2026-11-05 (batch 11): no recon draft in the HASP frame
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);

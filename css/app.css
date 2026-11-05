@@ -145,6 +145,12 @@ textarea { min-height: 96px; resize: vertical; }
 .q-submit:disabled { background: var(--card); color: var(--muted); }
 /* ?embed=214: the Field App's floating 214 button opens only this tab */
 body.embed .header, body.embed .tabs, body.embed .progress, body.embed #a2hsCard { display: none !important; }
+/* 2026-11-05 (batch 11): ?embed=hasp signs ONE plan (js/hasp-embed.js): no list, no back link; a result card instead */
+body.embed-hasp #haspList, body.embed-hasp #haspBack { display: none !important; }
+.he-card { border: 2px solid var(--line); border-radius: 12px; padding: 16px; margin: 8px 0; font-size: 16px; line-height: 1.45; }
+.he-card p { margin: 6px 0 12px; }
+.he-ok, .he-wait, .he-bad { font-size: 20px; font-weight: 800; }
+.he-ok { color: var(--green); } .he-wait { color: #f0a500; } .he-bad { color: #EC2329; }
 /* "Add to unit log?" after a personal 214: at the TOP (2026-11-04), away from the Log it button a second gloved tap would hit */
 .ask { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 1150; background: #111; border: 2px solid var(--green); border-radius: 12px; padding: 14px; font-size: 15px; line-height: 1.4; box-shadow: 0 6px 24px rgba(0,0,0,.6); }
 .ask-btns { display: flex; gap: 10px; margin-top: 12px; }
