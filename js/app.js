@@ -29,6 +29,14 @@
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function iconFor(code) { return 'assets/obs/' + encodeURIComponent(code) + '.png'; }
+  // 2026-11-05 (batch 11): "Nov 5, 5:46 AM", the way the rest of the app shows a time
+  function fmtWhen(v) {
+    var d = v instanceof Date ? v : new Date(v);
+    return isNaN(d.getTime()) ? String(v || '') : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+  // 2026-11-05 (batch 11): the Field App check-in (same origin) names the person holding the phone
+  function checkin() { try { var c = JSON.parse(lsGet('wri_checkin_state') || 'null'); return c && c.name ? c : null; } catch (e) { return null; } }
+  function whoAmI() { var c = checkin(); return (c && String(c.name).trim()) || lsGet('wri_recon_name') || ''; }
 
   // ---------- config (cached on the phone) ----------
   function loadConfig() {
@@ -51,11 +59,13 @@
     buildIncidents();
     buildStaff();
     buildCats();
+    linkType();
     buildTypes();
   }
 
   // ---------- incident ----------
   function wantedIncident() {
+    if (S.link && S.link.inc) return S.link.inc;   // #recon?type=…&inc=
     var m = /[?&]incident=([^&#]+)/.exec(location.search);
     if (m) return decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
     try {   // the phone's choice from the Field App incident gate (same origin)
@@ -161,12 +171,19 @@
   }
 
   // ---------- reporter ----------
-  function buildStaff() {
-    var sel = $('wriName'), keep = sel.value || lsGet('wri_recon_name') || '';
+  // 2026-11-05 (batch 11): the checked-in name first (it's the person holding the phone), then the last name used.
+  // A name that isn't on the staff list goes in the Other box by itself; the tech never has to pick "Other…".
+  function buildStaff(fresh) {
+    var sel = $('wriName'), cur = fresh ? '' : sel.value === '__other__' ? $('wriOther').value.trim() : sel.value;
+    var keep = cur || whoAmI();
+    var staff = (S.cfg && S.cfg.staff) || [];
     sel.innerHTML = '<option value="">Select…</option>';
-    ((S.cfg && S.cfg.staff) || []).forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+    staff.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
     sel.insertAdjacentHTML('beforeend', '<option value="__other__">Other…</option>');
-    if (keep) { sel.value = keep; if (sel.value !== keep) { sel.value = '__other__'; $('wriOther').value = keep; } }
+    if (keep) {
+      var hit = staff.filter(function (n) { return String(n).toLowerCase() === String(keep).toLowerCase(); })[0];
+      if (hit) { sel.value = hit; $('wriOther').value = ''; } else { sel.value = '__other__'; $('wriOther').value = keep; }
+    }
     $('wriOtherBox').classList.toggle('hidden', sel.value !== '__other__');
   }
   function setWri(v) {
@@ -253,21 +270,25 @@
     $('backBtn').classList.toggle('hidden', n === 1);
     $('nextBtn').classList.toggle('hidden', n === TOTAL);
     $('saveBtn').classList.toggle('hidden', n !== TOTAL);
+    $('saveBtn').textContent = URGENT[safetyKind()] ? 'Save + send alert' : 'Save point';
     if (n === 1) setTimeout(function () { initMap(); if (map) map.invalidateSize(); }, 50);
     if (n === TOTAL) renderReview();
     window.scrollTo(0, 0);
   }
   function renderReview() {
-    var t = typeObj(S.type) || {}, row = function (k, v) { return v ? '<div class="r"><div class="k">' + esc(k) + '</div><div>' + esc(v) + '</div></div>' : ''; };
+    var t = typeObj(S.type) || {}, sk = safetyKind(), row = function (k, v) { return v ? '<div class="r"><div class="k">' + esc(k) + '</div><div>' + esc(v) + '</div></div>' : ''; };
     $('review').innerHTML =
       row('Incident', S.incident ? S.incident.project_key + ' · ' + S.incident.client_name : '') +
-      row('When', S.timeSet ? $('obsTime').value.replace('T', ' ') : 'When you tap Save') +
+      row('When', S.timeSet ? fmtWhen($('obsTime').value) : 'When you tap Save') +
       row('Reporter', reporterName() + (S.isWri === 'no' && $('extAff').value ? ' (' + $('extAff').value + ')' : '')) +
       row('Type', (t.label || S.type) + (S.sub ? ' — ' + S.sub : '')) +
       row('Description', $('desc').value) +
       row('Task force', $('tfName').value + ($('tfStatus').value ? ' (' + $('tfStatus').value + ')' : '')) +
       row('Location', S.lat != null ? S.lat.toFixed(6) + ', ' + S.lon.toFixed(6) + (S.acc != null ? ' ± ' + S.acc + ' m' + (S.acc > POOR_GPS_M ? ' (weak fix: check it on the map)' : '') : '') : '') +
-      row('Photos', String(S.photos.length));
+      row('Photos', String(S.photos.length)) +
+      (sk ? row('Also', URGENT[sk] ? 'Emails the Incident Commander and Safety Officer now and logs it to the Safety unit log as ' + SAFETY[sk].toLowerCase() + '.' +
+          (SAFETY[S.type] ? ' Command staff signed up for ' + SAFETY[sk].toLowerCase() + ' alerts get a text.' : '')
+        : 'Logs it to the Safety unit log. Command staff signed up for near miss alerts get a text.') : '');
   }
 
   function save() {
@@ -288,14 +309,18 @@
       }
     };
     if (S.isWri === 'yes') lsSet('wri_recon_name', reporterName());
-    var droneGroup = S.droneGroup;
+    var droneGroup = S.droneGroup, safety = safetyKind();
     Outbox.enqueue(rec, S.photos.map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta || '' }; })).then(function () {
-      busy(b, false);
       lsSet(DRAFT_KEY, '');   // saved: nothing left to pick up
+      // 2026-11-05 (batch 11): a Stop work / Injury / Near miss point also goes to the Safety 214 (forms-ui.js safetyFromRecon):
+      // stop work + injury as the urgent alert (IC + Safety Officer emailed now), a near miss as a plain Safety unit-log entry
+      if (safety && window.WRIForms && WRIForms.safetyFromRecon) {
+        return WRIForms.safetyFromRecon(rec, safety).catch(function (e) { toast('The point is saved, but the Safety 214 could not be: ' + e.message + '. Radio the Safety Officer.', 10000); });
+      }
+    }).then(function () {
+      busy(b, false);
       if (droneGroup) window.dispatchEvent(new CustomEvent('recon:saved', { detail: { recon_id: rec.recon_id, drone_group: droneGroup } }));
-      $('doneTitle').textContent = 'Saved on this phone';
-      $('doneSub').textContent = navigator.onLine ? 'Uploading now…' : 'No signal: it uploads by itself when you’re back in coverage. Open Recon then.';
-      $('doneOverlay').classList.remove('hidden');
+      showDone(rec.recon_id, safety, !!SAFETY[rec.fields.observation_type]);
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
     }, function (e) {
       busy(b, false); toast('Could not save on this phone: ' + e.message + '. Free up storage and try again.', 8000);
@@ -305,26 +330,35 @@
   var DRAFT_IDS = ['desc', 'tfName', 'tfStatus', 'extName', 'extAff', 'affDesc', 'obsTime'];
   function saveDraft() {
     if (!S.booted) return;
-    var d = { at: Date.now(), step: S.step, lat: S.lat, lon: S.lon, acc: S.acc, cat: S.cat, type: S.type, sub: S.sub, isWri: S.isWri, timeSet: !!S.timeSet,
-              incident: S.incident ? S.incident.incident_id : '', v: {} };
-    DRAFT_IDS.forEach(function (id) { d.v[id] = $(id).value; });
+    var d = draftObj();
     var empty = d.lat == null && !d.type && !d.v.desc && !d.v.tfName;
     lsSet(DRAFT_KEY, empty ? '' : JSON.stringify(d));
   }
-  function restoreDraft() {
-    var d; try { d = JSON.parse(lsGet(DRAFT_KEY) || 'null'); } catch (e) { d = null; }
-    if (!d || Date.now() - d.at > DRAFT_MS || (d.incident && S.incident && d.incident !== S.incident.incident_id)) return;
+  function draftObj() {
+    var d = { at: Date.now(), step: S.step, lat: S.lat, lon: S.lon, acc: S.acc, cat: S.cat, type: S.type, sub: S.sub, isWri: S.isWri, timeSet: !!S.timeSet,
+              incident: S.incident ? S.incident.incident_id : '', v: {} };
+    if (S.link) { d.link = S.link.type; d.linkFrom = S.link.from || ''; d.skipped = !!S.link.skipped; d.via3 = !!S.link.via3; }
+    DRAFT_IDS.forEach(function (id) { d.v[id] = $(id).value; });
+    return d;
+  }
+  function readDraft() { try { return JSON.parse(lsGet(DRAFT_KEY) || 'null'); } catch (e) { return null; } }
+  function restoreDraft(d, photos) {
+    if (d === undefined) d = readDraft();
+    if (!d || Date.now() - d.at > DRAFT_MS || (d.incident && S.incident && d.incident !== S.incident.incident_id)) return false;
     DRAFT_IDS.forEach(function (id) { if (d.v[id] != null) $(id).value = d.v[id]; });
     S.timeSet = d.timeSet; if (d.isWri) setWri(d.isWri);
     if (d.cat) { S.cat = d.cat; buildCats(); }
-    S.type = d.type || null; S.sub = d.sub || null; buildTypes();
+    S.type = d.type || null; S.sub = d.sub || null;
+    setLink(d.link ? { type: d.link, from: d.linkFrom || '', skipped: !!d.skipped, via3: !!d.via3 } : null);
+    buildTypes();
+    if (photos && photos.length) { S.photos = photos; renderPhotos(); }
     if (d.lat != null) setLoc(d.lat, d.lon, d.acc, 'restore');
     go(Math.min(d.step || 1, TOTAL));
-    toast('Picked up your unsaved point where you left off' + (S.photos.length ? '' : ' (add the photos again)') + '.', 6000);
+    toast('Picked up your unsaved ' + (d.link ? SAFETY[d.link].toLowerCase() + ' report' : 'point') + ' where you left off' + (S.photos.length ? '' : ' (add the photos again)') + '.', 6000);
+    return true;
   }
-  function resetForm() {
-    $('doneOverlay').classList.add('hidden');
-    lsSet(DRAFT_KEY, ''); S.timeSet = false;
+  function clearForm() {
+    S.timeSet = false;
     S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
     S.photos = []; S.type = null; S.sub = null; S.lat = null; S.lon = null; S.acc = null;
     S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null;
@@ -332,8 +366,163 @@
     $('coords').textContent = 'No location yet'; $('gpsBtn').textContent = 'Use My Location'; $('gpsBtn').classList.remove('ok');
     if (marker && map) { map.removeLayer(marker); marker = null; }
     $('obsTime').value = localNow();
-    renderPhotos(); buildTypes(); go(1);
+    renderPhotos();
+  }
+  function resetForm() {
+    var from = S.link && S.link.from;
+    endDone();
     lsSet(DRAFT_KEY, '');
+    clearForm(); setLink(null); buildTypes(); go(1);
+    lsSet(DRAFT_KEY, '');
+    unpark();   // a point set aside for a safety report comes back
+    // a report started from the 214 tab's Safety buttons goes back there
+    if (from === '214' && window.WRIForms) WRIForms.showView('214');
+  }
+
+  // ---------- one-tap safety reports (2026-11-05, batch 11) ----------
+  // #recon?type=near_miss|injury|stop_work[&inc=<incident id>] (Field App Forms buttons, the 214 Safety buttons):
+  // WRI = yes, the checked-in name, Safety + the type picked, GPS started. Step 1 -> Next goes straight to the details.
+  // A different unsaved point is set aside (wri_recon_draft_parked, photos kept in memory) and comes back after.
+  var SAFETY = { near_miss: 'Near miss', injury: 'Injury', stop_work: 'Stop work' };
+  var URGENT = { injury: 1, stop_work: 1 };   // these also send the IC + Safety Officer alert (the batch 7 214 path)
+  var PARK_KEY = 'wri_recon_draft_parked', parkedPhotos = {};
+  function parseLink(hash) {
+    var m = /^#recon\?(.*)$/.exec(hash || '');
+    if (!m) return null;
+    var q = {};
+    m[1].split('&').forEach(function (kv) {
+      var p = kv.split('=');
+      try { if (p[0]) q[decodeURIComponent(p[0])] = decodeURIComponent((p[1] || '').replace(/\+/g, ' ')).trim(); } catch (e) {}
+    });
+    var type = String(q.type || '').toLowerCase();
+    return SAFETY[type] ? { type: type, inc: q.inc || q.incident || '' } : null;
+  }
+  // the point's own kind; a stop work report filed under another Safety type (an older list) still goes as stop work
+  function safetyKind() {
+    if (SAFETY[S.type]) return S.type;
+    var t = typeObj(S.type) || {};
+    return S.link && S.type && (t.category || S.cat) === 'Safety' ? S.link.type : '';
+  }
+  function linkTitle() { return S.link ? SAFETY[S.link.type] + ' report' : ''; }
+  function setLink(l) {
+    S.link = l || null;
+    $('safetyLink').classList.toggle('hidden', !S.link);
+    if (S.link) $('safetyLinkTitle').textContent = linkTitle();
+    if (!$('steps').classList.contains('hidden')) $('viewTitle').textContent = linkTitle() || 'Recon';
+    linkType();
+  }
+  // the type picked for the link, once the lists say it exists (stop_work is new: an older list may not have it)
+  function linkType() {
+    if (!S.link) return;
+    var have = !S.cfg || !!typeObj(S.link.type);   // no lists yet: keep it, the server checks the type
+    if (have && !S.type) S.type = S.link.type;
+    if (!have && S.type === S.link.type) S.type = null;
+    S.cat = 'Safety'; buildCats();
+    $('safetyLinkHint').textContent = have ? 'Mark the spot (GPS is on its way), then Next: what happened and photos.'
+      : SAFETY[S.link.type] + ' isn’t on this phone’s list yet: pick the closest Safety type on step 3. It still goes to command.';
+    $('obsMissing').classList.toggle('hidden', have);
+    $('obsMissing').textContent = have ? '' : SAFETY[S.link.type] + ' isn’t on the list yet: pick the closest Safety type below.';
+  }
+  function parks() { try { var a = JSON.parse(lsGet(PARK_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function park(d) {
+    if (!d) return;
+    var a = parks(); a.push(d); lsSet(PARK_KEY, JSON.stringify(a.slice(-5)));
+    if (S.photos.length) { parkedPhotos[d.at] = S.photos; S.photos = []; }
+  }
+  function unpark() {
+    var a = parks(), inc = S.incident && S.incident.incident_id;
+    for (var i = a.length - 1; i >= 0; i--) {
+      if (Date.now() - a[i].at > DRAFT_MS) { a.splice(i, 1); continue; }
+      if (a[i].incident && inc && a[i].incident !== inc) continue;   // another incident's: stays set aside
+      var d = a.splice(i, 1)[0];
+      lsSet(PARK_KEY, JSON.stringify(a));
+      var ph = parkedPhotos[d.at]; delete parkedPhotos[d.at];
+      lsSet(DRAFT_KEY, JSON.stringify(d));
+      if (restoreDraft(d, ph)) toast('Back to the ' + (d.link ? SAFETY[d.link].toLowerCase() + ' report' : 'point') + ' you were working on before.', 6000);
+      return;
+    }
+    lsSet(PARK_KEY, JSON.stringify(a));
+  }
+  /** Open a safety report. opts: {from: '214', desc}. */
+  function openSafety(type, opts) {
+    opts = opts || {};
+    if (!SAFETY[type]) return false;
+    var justSaved = !!done;   // the finish card is up: the form holds the point just saved, not a draft
+    endDone();
+    if (S.booted && !justSaved) saveDraft();
+    var d = justSaved ? null : readDraft();
+    if (!d && !justSaved && S.photos.length) d = draftObj();   // only photos so far: still worth keeping
+    if (d && d.link === type && Date.now() - d.at < DRAFT_MS && restoreDraft(d)) {   // the same report, opened again: carry on with it
+      if (opts.from) S.link.from = opts.from;
+      if (S.lat == null) gps();
+      return true;
+    }
+    if (d) park(d);
+    lsSet(DRAFT_KEY, '');
+    clearForm();
+    setWri('yes'); buildStaff(true);
+    S.type = null; setLink({ type: type, from: opts.from || '', inc: opts.inc || '' });
+    buildTypes();
+    if (opts.desc) $('desc').value = opts.desc;
+    go(1);
+    if (d) toast('Your unsaved point is set aside. It comes back after this report.', 6000);
+    gps();
+    return true;
+  }
+  function next() {
+    var m = check(S.step); if (m) { toast(m); return; }
+    // a safety report skips what's already filled: reporter + type set = straight to the details (type missing = step 3)
+    if (S.link && S.step === 1 && !check(2)) { S.link.skipped = true; S.link.via3 = !!check(3); go(S.link.via3 ? 3 : 4); return; }
+    go(S.step + 1);
+  }
+  function back() {
+    if (S.link && S.link.skipped && (S.step === 3 || (S.step === 4 && !S.link.via3))) { go(1); return; }
+    go(Math.max(1, S.step - 1));
+  }
+
+  // ---------- after Save (2026-11-05, batch 11) ----------
+  // Live status for the point: Submitted once it's up, or saved on the phone when there's no signal; then the form
+  // clears itself (~2.5 s). Photos still uploading carry on in the background (My entries shows them).
+  var DONE_MS = 2500, SLOW_MS = 10000, done = null;
+  function showDone(id, safety, texts) {   // texts: the point's type is the safety type (the SMS app keys on it)
+    endDone();
+    done = { id: id, safety: safety, texts: texts, t0: Date.now() };
+    done.slow = setTimeout(renderDone, SLOW_MS);
+    $('doneOverlay').classList.remove('hidden');
+    renderDone();
+  }
+  function endDone() {
+    if (done) { clearTimeout(done.slow); clearTimeout(done.auto); }
+    done = null; $('doneOverlay').classList.add('hidden');
+  }
+  function renderDone() {
+    if (!done) return;
+    var dn = done;
+    Store.get('records', dn.id).then(function (r) {
+      if (dn !== done) return;
+      var st = !r ? 'gone' : (r.oid || r.status === 'sent') ? 'sent' : r.status === 'needs_pin' ? 'pin' : r.status === 'failed' ? 'failed'
+        : (!navigator.onLine || r.last_error || Date.now() - dn.t0 >= SLOW_MS) ? 'queued' : 'sending';
+      var L = dn.safety ? SAFETY[dn.safety].toLowerCase() : '', icon = '✅', title, sub = '', more = '';
+      if (st === 'sent') {
+        title = 'Submitted';
+        if (dn.safety) sub = (URGENT[dn.safety] ? 'The Incident Commander and Safety Officer are being emailed. ' : 'It goes on the Safety unit log. ') +
+          (dn.texts ? 'Command staff signed up for ' + L + ' alerts get a text within 5 minutes.' : '');
+        if (r && r.photo_count && r.status !== 'sent') more = 'Photos keep uploading in the background (My entries shows them).';
+      } else if (st === 'sending') {
+        icon = '<span class="spin big-spin"></span>'; title = 'Uploading…'; sub = 'Saved on this phone.';
+      } else if (st === 'failed') {
+        icon = '⚠️'; title = 'Saved on this phone'; sub = 'It could not upload: ' + ((r && r.last_error) || 'error') + '. Open My entries to fix it.';
+      } else {
+        icon = '📱'; title = 'Saved on this phone';
+        sub = st === 'pin' ? 'It uploads once the incident PIN is in.' : 'It uploads by itself when you’re back in coverage.';
+        if (dn.safety) more = 'The ' + L + (URGENT[dn.safety] ? ' alert' + (dn.texts ? ' and texts go' : ' goes') : dn.texts ? ' texts go' : ' log entry goes') + ' out once it uploads. Radio your supervisor and the Safety Officer now.';
+      }
+      $('doneIcon').innerHTML = icon; $('doneTitle').textContent = title; $('doneSub').textContent = sub;
+      $('doneMore').textContent = more; $('doneMore').classList.toggle('hidden', !more);
+      $('doneOverlay').dataset.state = st;
+      // a final answer: clear the form shortly (a failure waits for the tech to read it)
+      if (st !== 'sending' && st !== 'failed' && !dn.auto) dn.auto = setTimeout(function () { if (dn === done) resetForm(); }, DONE_MS + (more ? 1500 : 0));
+    }).catch(function () {});
   }
 
   // ---------- Field App Checklist ticks (2026-11-03) ----------
@@ -490,8 +679,16 @@
       var b = e.target.closest('.rm'); if (!b) return;
       var p = S.photos.splice(Number(b.dataset.i), 1)[0]; if (p) URL.revokeObjectURL(p.url); renderPhotos();
     });
-    $('nextBtn').addEventListener('click', function () { var m = check(S.step); if (m) { toast(m); return; } go(S.step + 1); });
-    $('backBtn').addEventListener('click', function () { go(Math.max(1, S.step - 1)); });
+    $('nextBtn').addEventListener('click', next);
+    $('backBtn').addEventListener('click', back);
+    $('safetyLinkCancel').addEventListener('click', function () {   // not a safety report after all: a normal point, nothing typed is lost
+      setLink(null); buildTypes(); saveDraft(); toast('Now a normal recon point. Pick the type on step 3.');
+    });
+    window.addEventListener('hashchange', function () {   // the Field App can point an open page at a safety report
+      var l = parseLink(location.hash); if (!l) return;
+      if (l.inc && S.cfg) { var r = (S.cfg.incidents || []).filter(function (x) { return x.incident_id === l.inc || x.project_key === l.inc; })[0]; if (r) { $('incidentSel').value = r.incident_id; setIncident(r); } }
+      openSafety(l.type, { inc: l.inc }); if (window.WRIForms) WRIForms.showView('recon');
+    });
     $('saveBtn').addEventListener('click', save);
     $('obsTime').addEventListener('change', function () { S.timeSet = true; saveDraft(); });
     $('steps').addEventListener('change', saveDraft);
@@ -521,10 +718,10 @@
     $('a2hsDismiss').addEventListener('click', function () { lsSet('wri_recon_a2hs', '1'); $('a2hsCard').classList.add('hidden'); });
     try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 
-    window.addEventListener('outbox:changed', refreshStatus);
+    window.addEventListener('outbox:changed', function () { refreshStatus(); renderDone(); });
     if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.type === 'outbox:changed') refreshStatus(); });
     window.addEventListener('online', function () { initMap(); wakeKick(); });
-    window.addEventListener('offline', refreshStatus);
+    window.addEventListener('offline', function () { refreshStatus(); renderDone(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
       if (hiddenAt && Date.now() - hiddenAt > 60000) wakeKick(); else kick();   // back after a while = a fresh open
@@ -532,11 +729,16 @@
     window.addEventListener('focus', kick);
     setInterval(function () { if (document.visibilityState === 'visible') kick(); }, 30000);
 
+    var link = parseLink(location.hash);   // read before forms-ui clears the hash
+    if (link) S.link = { type: link.type, inc: link.inc };   // wantedIncident() follows &inc=
     showPendingIncident();
+    buildStaff();   // the checked-in name shows before the lists load
+    if (link) openSafety(link.type, { inc: link.inc });
     takeChecklistTicks();
     loadConfig().then(function () {
       S.booted = true;
-      if (!/[?&]embed=214/.test(location.search)) restoreDraft();
+      if (link) saveDraft();
+      else if (!/[?&]embed=214/.test(location.search)) restoreDraft();
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);
@@ -549,7 +751,7 @@
    */
   function prefillFromDrone(o) {
     S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
-    S.maxPhotos = CONFIG.DRONE_PER_POINT; S.droneGroup = o.groupId;
+    S.maxPhotos = CONFIG.DRONE_PER_POINT; S.droneGroup = o.groupId; if (S.link) setLink(null);
     S.photos = o.photos.slice(0, S.maxPhotos).map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta, url: URL.createObjectURL(p.blob) }; });
     S.lat = null; S.lon = null; S.acc = null;
     if (marker && map) { map.removeLayer(marker); marker = null; }
@@ -560,6 +762,7 @@
   }
 
   window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
+    openSafety: openSafety, linkTitle: linkTitle, checkin: checkin, SAFETY: SAFETY, URGENT: URGENT,
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
     askPin: function (m, inc) { askPin(m, inc); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
   document.addEventListener('DOMContentLoaded', boot);

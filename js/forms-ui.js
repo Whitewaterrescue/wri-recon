@@ -25,7 +25,8 @@
   }
   var notMe = false;   // "Not you?" tapped: the name stays empty until they pick one
   function fillNames(sel, otherBox, otherInput, withOther) {
-    var keep = sel.value || A.lsGet('wri_recon_name') || (notMe ? '' : checkinName()) || '';
+    // 2026-11-05 (batch 11): the checked-in name first (the person holding the phone), then the last name used here
+    var keep = sel.value || (notMe ? '' : checkinName()) || A.lsGet('wri_recon_name') || '';
     var names = staff(), lc = function (n) { return n.toLowerCase(); };
     // a name that isn't on the staff list (the check-in name, one typed under Other…) is its own choice, not "Other…"
     if (keep && keep !== '__other__' && withOther) {
@@ -96,7 +97,7 @@
     [].forEach.call(document.querySelectorAll('.view'), function (m) { m.classList.toggle('hidden', m.dataset.view !== v); });
     document.querySelector('.nav').classList.toggle('hidden', v !== 'recon');
     $('progressBar').classList.toggle('hidden', v !== 'recon');
-    $('viewTitle').textContent = TITLES[v];
+    $('viewTitle').textContent = (v === 'recon' && A.linkTitle()) || TITLES[v];   // "Near miss report" (batch 11)
     try { history.replaceState(null, '', location.pathname + location.search + (v === 'recon' ? '' : '#' + v)); } catch (e) {}
     if (v === 'recon') A.invalidateMap();
     render();
@@ -104,6 +105,7 @@
   function render() {
     if (view === '214') {
       fillNames($('l214Name'), $('l214OtherBox'), $('l214Other'), true); renderWho(); renderMine('214', $('l214List'));
+      if (!$('l214Pos').value.trim()) $('l214Pos').value = myPosition(pickedName($('l214Name'), $('l214Other')));
       if (!$('l214Act').value.trim()) $('l214Time').value = A.localNow();   // the panel can sit open for hours
       renderAlert();
     }
@@ -155,7 +157,9 @@
   function write214(who, act, at, btn, clearAct, unit, done, urgent) {   // unit: also post to the unit log (default: my own 214A only)
     if (urgent) unit = true;
     var quiet = !unit && noAskToday(who);   // "Don't ask again today": personal entries go straight up
-    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', $('l214Pos').value.trim()); A.lsSet('wri_214_section', $('l214Sec').value);
+    var pos = $('l214Pos').value.trim();
+    if (pos !== myPosition(who)) A.lsSet('wri_214_pos_at', String(Date.now()));   // typed over the check-in's: it wins from now on
+    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
     var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
@@ -236,6 +240,8 @@
       return it[3] !== 'urgent' ? '' : '<button type="button" class="q-urg" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
         '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
     }).join('');
+    if ($('q214Urgent').innerHTML && A.openSafety) $('q214Urgent').insertAdjacentHTML('beforeend',   // batch 11
+      '<div class="hint">Each opens a quick report: mark the spot, say what happened. Stop work and Injury also alert the Incident Commander and Safety Officer.</div>');
     $('q214Pills').innerHTML = g.items.map(function (it, j) {
       return it[3] === 'urgent' ? '' : '<button type="button" class="q-pill q-' + A.esc(it[2] || 'info') + '" data-j="' + j + '"><span class="q-ico">' + A.esc(it[1] || '') +
         '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
@@ -376,6 +382,47 @@
           .then(function (d) { if (d && d.ack) gotAck(al.id, d.ack); });
       });
     }).catch(function () {}).then(function () { alertPolling = false; });
+  }
+
+  // ---------- safety recon reports (2026-11-05, batch 11) ----------
+  // The 214 Safety buttons open a recon report (#recon?type=…): the point puts it on the map and the opt-in SMS app texts
+  // command staff subscribed to that type. Once the point is saved, its Safety 214 goes too: Stop work and Injury as the
+  // urgent alert above (the IC + Safety Officer emailed at once, with the recon description), a near miss as a plain
+  // Safety unit-log entry ("Near miss: …"), which the Sit Stat / Board near-miss count reads from the activity text.
+  function openSafetyRecon(it) {
+    var kind = urgentKind(it);
+    if (!kind || !A.openSafety) return false;
+    var det = $('q214Det').value.trim();
+    closeCat(); showView('recon');
+    return A.openSafety(kind, { from: '214', desc: det });
+  }
+  var safetyDone = {};   // recon ids whose Safety 214 is already in the outbox (one per point, ever)
+  function safetyFromRecon(rec, kind) {   // kind: stop_work | injury | near_miss (default: the point's type)
+    var f = rec.fields || {};
+    kind = kind || f.observation_type;
+    if (!A.SAFETY[kind] || safetyDone[rec.recon_id]) return Promise.resolve(null);
+    safetyDone[rec.recon_id] = 1;
+    var urgent = A.URGENT[kind] ? kind : '', desc = String(f.description || '').trim();
+    var act = urgent ? (kind === 'injury' ? 'Injury reported' : 'Stop work') + (desc ? ' — ' + desc : '') + ' (recon point)'
+      : 'Near miss' + (desc ? ': ' + desc : '') + ' (recon point)';
+    var who = String(f.reporter_name || '').trim();
+    var r = { recon_id: A.uuid(), kind: '214', incident: rec.incident, hold_until: 0,
+              fields: { person: who, position: myPosition(who), activity: act, at: f.observation_epoch || Date.now(), also_unit: true,
+                        section: 'safety', default_section: 'operations', recon_id: rec.recon_id } };
+    if (urgent) r.fields.urgent = urgent;
+    return Outbox.enqueue(r, []).then(function () {
+      if (urgent) { trackAlert(r, urgent); renderAlert(); }
+      if (view === '214') renderMine('214', $('l214List'));
+      return r;
+    }, function (e) { delete safetyDone[rec.recon_id]; throw e; });
+  }
+  // the ICS position for a 214: the check-in's, unless one was typed on the 214 after that check-in
+  function myPosition(who) {
+    var c = A.checkin(), saved = A.lsGet('wri_214_pos') || '', at = Number(A.lsGet('wri_214_pos_at') || 0);
+    var cpos = c ? String(c.position || c.role || '').trim() : '';
+    var same = !who || (c && String(c.name).trim().toLowerCase() === String(who).trim().toLowerCase());
+    if (cpos && same && !(saved && at > (Date.parse(c.since) || 0))) return cpos;
+    return saved;
   }
 
   // ---------- request status (2026-11-04, batch 7): what Logistics has done with my requests ----------
@@ -611,7 +658,9 @@
     $('q214Cats').addEventListener('click', function (e) { var b = e.target.closest('.q-cat'); if (b) openCat(Number(b.dataset.i)); });
     var onPick = function (e) {
       var b = e.target.closest('.q-pill, .q-urg'); if (!b) return;
-      var j = Number(b.dataset.j); qPick = qPick === j ? null : j; qSync();
+      var j = Number(b.dataset.j);
+      if (b.classList.contains('q-urg') && openSafetyRecon(qCat.items[j])) return;   // batch 11: Stop work / Injury / Near miss = a recon report
+      qPick = qPick === j ? null : j; qSync();
       var it = qPick !== null ? qCat.items[qPick] : null;
       if (it && needsDetail(it) && !$('q214Det').value.trim()) {   // tell them before they tap Log it
         A.toast('“' + it[0].replace(/…$/, '') + '” needs details. Type them in the Details box, then tap Log it.', 5000);
@@ -642,7 +691,8 @@
     $('q214Unit').addEventListener('change', qSync);   // the button says where the entry goes
     $('l214Unit').addEventListener('change', function () { $('l214Save').textContent = this.checked ? 'Save note to my log + unit log' : 'Save note'; });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
-    $('l214Time').value = A.localNow(); $('l214Pos').value = A.lsGet('wri_214_pos') || ''; $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
+    $('l214Time').value = A.localNow(); $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
+    $('l214Pos').value = myPosition(checkinName());   // batch 11: the check-in position
     renderDest();
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); renderWho(); renderMine('214', $('l214List')); });
     $('l214Other').addEventListener('change', function () { renderWho(); renderMine('214', $('l214List')); });
@@ -691,6 +741,6 @@
     window.addEventListener('online', refreshCfg);
     showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
   }
-  window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); } };
+  window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); }, safetyFromRecon: safetyFromRecon };
   document.addEventListener('DOMContentLoaded', boot);
 })();
