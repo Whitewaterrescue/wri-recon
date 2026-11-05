@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-05-1">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-05-3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -40,6 +40,12 @@
   </div>
 
   <main id="steps" class="view" data-view="recon">
+    <!-- 2026-11-05 (batch 11): one-tap safety report (#recon?type=near_miss|injury|stop_work) -->
+    <div class="safety-link hidden" id="safetyLink" role="status">
+      <div class="sl-t" id="safetyLinkTitle">Safety report</div>
+      <div class="sl-h" id="safetyLinkHint"></div>
+      <button type="button" class="link" id="safetyLinkCancel">Not a safety report? Make it a normal point</button>
+    </div>
     <!-- STEP 1 -->
     <section class="step" data-step="1">
       <div class="step-title">When &amp; Where</div>
@@ -75,6 +81,7 @@
       <div class="step-title">Observation Type</div>
       <div class="note">One item per point. Save a separate point for each observation.</div>
       <div class="cat-tabs" id="catTabs"></div>
+      <div class="note hidden" id="obsMissing"></div>
       <div class="obs-grid" id="obsGrid"></div>
       <div class="hidden" id="subBox"><label>Sub-type</label><div class="chips" id="subChips"></div></div>
     </section>
@@ -308,11 +315,13 @@
   </div>
 
   <!-- Done -->
+  <!-- 2026-11-05 (batch 11): live status for the point just saved, then the form clears itself (js/app.js showDone) -->
   <div class="overlay hidden" id="doneOverlay">
-    <div class="box center">
-      <div class="big">✅</div>
-      <div class="box-title" id="doneTitle">Saved</div>
-      <div class="hint" id="doneSub"></div>
+    <div class="box center" role="status" aria-live="polite">
+      <div class="big" id="doneIcon">✅</div>
+      <div class="box-title done-title" id="doneTitle">Saved</div>
+      <div class="done-sub" id="doneSub"></div>
+      <div class="hint hidden" id="doneMore"></div>
       <button class="btn btn-next" id="newBtn" type="button">New point</button>
     </div>
   </div>
@@ -335,16 +344,17 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-05-1"></script>
-  <script src="js/store.js?v=2026-11-05-1"></script>
-  <script src="js/api.js?v=2026-11-05-1"></script>
-  <script src="js/outbox.js?v=2026-11-05-1"></script>
-  <script src="js/forms.js?v=2026-11-05-1"></script>
-  <script src="js/app.js?v=2026-11-05-1"></script>
-  <script src="js/forms-ui.js?v=2026-11-05-1"></script>
-  <script src="js/dronemeta.js?v=2026-11-05-1"></script>
-  <script src="js/drone-ui.js?v=2026-11-05-1"></script>
-  <script src="js/drill-ui.js?v=2026-11-05-1"></script>
+  <script src="js/config.js?v=2026-11-05-3"></script>
+  <script src="js/store.js?v=2026-11-05-3"></script>
+  <script src="js/api.js?v=2026-11-05-3"></script>
+  <script src="js/outbox.js?v=2026-11-05-3"></script>
+  <script src="js/forms.js?v=2026-11-05-3"></script>
+  <script src="js/app.js?v=2026-11-05-3"></script>
+  <script src="js/forms-ui.js?v=2026-11-05-3"></script>
+  <script src="js/dronemeta.js?v=2026-11-05-3"></script>
+  <script src="js/drone-ui.js?v=2026-11-05-3"></script>
+  <script src="js/drill-ui.js?v=2026-11-05-3"></script>
+  <script src="js/hasp-embed.js?v=2026-11-05-3"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

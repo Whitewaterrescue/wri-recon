@@ -10,7 +10,7 @@
  *
  * APP_VERSION must equal the ?v= stamps in index.html; bump both together.
  */
-var APP_VERSION = '2026-11-05-1';
+var APP_VERSION = '2026-11-05-3';
 var CACHE = 'wri-recon-' + APP_VERSION;
 var LIB_CACHE = 'wri-recon-lib-leaflet-1.9.4';
 
@@ -23,11 +23,11 @@ var SHELL = [
   './css/app.css?v=' + APP_VERSION,
   './js/config.js?v=' + APP_VERSION, './js/store.js?v=' + APP_VERSION, './js/api.js?v=' + APP_VERSION,
   './js/outbox.js?v=' + APP_VERSION, './js/forms.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION,
-  './js/forms-ui.js?v=' + APP_VERSION, './js/dronemeta.js?v=' + APP_VERSION, './js/drone-ui.js?v=' + APP_VERSION, './js/drill-ui.js?v=' + APP_VERSION
+  './js/forms-ui.js?v=' + APP_VERSION, './js/dronemeta.js?v=' + APP_VERSION, './js/drone-ui.js?v=' + APP_VERSION, './js/drill-ui.js?v=' + APP_VERSION, './js/hasp-embed.js?v=' + APP_VERSION
 ].concat(['aid_station', 'boat_ramp', 'current_boom_site', 'decon', 'drone_flight', 'fish_kill', 'hospital', 'icp',
   'injured_wildlife', 'injury', 'landing_zone', 'near_miss', 'oil_spotted', 'other_action', 'other_observation',
   'other_safety', 'planned_boom_site', 'planned_staging_area', 'recovery_complete', 'response_action', 'river_hazard',
-  'road_closure', 'safety_briefing', 'scat_point', 'staging_area', 'tactical_team'].map(function (c) { return './assets/obs/' + c + '.png'; }));
+  'road_closure', 'safety_briefing', 'scat_point', 'staging_area', 'stop_work', 'tactical_team'].map(function (c) { return './assets/obs/' + c + '.png'; }));
 var LIBS = [
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
