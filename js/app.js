@@ -738,7 +738,7 @@
     loadConfig().then(function () {
       S.booted = true;
       if (link) saveDraft();
-      else if (!/[?&]embed=214/.test(location.search)) restoreDraft();
+      else if (!/[?&]embed=(214|hasp)/.test(location.search)) restoreDraft();   // 2026-11-05 (batch 11): no recon draft in the 214 / HASP frames
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);
