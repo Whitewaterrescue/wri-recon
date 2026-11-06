@@ -24,6 +24,26 @@
     if (on) { btn._label = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + esc(label || 'Working…'); }
     else { btn.disabled = false; if (btn._label != null) btn.innerHTML = btn._label; }
   }
+  // 2026-11-06 (batch 13 polish, persona: "every filled field gets a red border"): a field is red only when a
+  // Save / Next check failed on it, with the reason under it; it clears as soon as it's edited. Fields are
+  // otherwise neutral (focus = a blue edge).
+  function markBad(el, msg) {
+    if (!el) return;
+    el.classList.add('bad'); el.setAttribute('aria-invalid', 'true');
+    var box = el.closest('.field') || el.parentNode, err = box.querySelector(':scope > .field-err');
+    if (!err) { err = document.createElement('div'); err.className = 'field-err'; err.setAttribute('role', 'alert'); box.appendChild(err); }
+    err.textContent = msg || '';
+    if (!el._badOff) {
+      el._badOff = function () { clearBad(el); };
+      el.addEventListener('input', el._badOff); el.addEventListener('change', el._badOff);
+    }
+  }
+  function clearBad(el) {
+    if (!el || !el.classList.contains('bad')) return;
+    el.classList.remove('bad'); el.removeAttribute('aria-invalid');
+    var box = el.closest('.field') || el.parentNode, err = box && box.querySelector(':scope > .field-err');
+    if (err) err.remove();
+  }
   function uuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'r-' + Date.now() + '-' + Math.random().toString(16).slice(2)); }
   function localNow() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -296,6 +316,10 @@
     if (step === 3 && !S.type) return 'Pick what you observed.';
     return '';
   }
+  /** Mark the field that failed a step's check (only after Next / Save was tapped). */
+  function flagStep(step) {
+    if (step === 2 && !reporterName()) markBad(S.isWri === 'yes' ? ($('wriName').value === '__other__' ? $('wriOther') : $('wriName')) : $('extName'), 'Enter your name.');
+  }
   function go(n) {
     S.step = n;
     if (!S.timeSet) $('obsTime').value = localNow();   // untouched: keep it "now"
@@ -340,7 +364,7 @@
   }
 
   function save() {
-    for (var i = 1; i < TOTAL; i++) { var m = check(i); if (m) { toast(m); go(i); return; } }
+    for (var i = 1; i < TOTAL; i++) { var m = check(i); if (m) { toast(m); go(i); flagStep(i); return; } }
     var b = $('saveBtn'); busy(b, true, 'Saving…');
     var log214 = r214Shown() && $('r214On').checked;
     var t = typeObj(S.type) || {};
@@ -522,7 +546,7 @@
     return true;
   }
   function next() {
-    var m = check(S.step); if (m) { toast(m); return; }
+    var m = check(S.step); if (m) { toast(m); flagStep(S.step); return; }
     // a safety report skips what's already filled: reporter + type set = straight to the details (type missing = step 3)
     if (S.link && S.step === 1 && !check(2)) { S.link.skipped = true; S.link.via3 = !!check(3); go(S.link.via3 ? 3 : 4); return; }
     go(S.step + 1);
@@ -651,23 +675,53 @@
   }
 
   // ---------- saved list + banner ----------
+  // 2026-11-06 (batch 13 polish, persona run): the banner said "waiting to upload — uploading…" after My entries
+  // said everything was up, and when it went away the page jumped ~40 px under a tap. Now:
+  //  - it reads the outbox on every change (any page, tab or the worker: Outbox emit) and every 4 s while it shows,
+  //    and an older read never overwrites a newer one;
+  //  - "Uploading…" only while an upload is really running; a retry delay, no signal and a 214 waiting for its
+  //    "Add to unit log?" answer each say so;
+  //  - it is one fixed-height line, and while the phone holds any entry (they stay a day after upload) the line
+  //    stays: when the last item goes up it turns green "All N uploaded" in place instead of collapsing. Once shown
+  //    it never collapses while the page is open, so nothing below it moves under a thumb.
+  var statusSeq = 0, bannerPoll = 0;
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
   function refreshStatus() {
-    return Outbox.summary().then(function (s) {
-      var waiting = s.queued, bn = $('banner');
-      $('savedCount').textContent = (waiting + s.needs_pin + s.failed) ? '(' + (waiting + s.needs_pin + s.failed) + ')' : '';
+    var seq = ++statusSeq;
+    return Promise.all([Outbox.summary(), Outbox.uploading ? Outbox.uploading() : false]).then(function (a) {
+      if (seq !== statusSeq) return;   // a newer read is on its way
+      var s = a[0], up = a[1], waiting = s.queued, bn = $('banner'), open = waiting + s.needs_pin + s.failed;
+      $('savedCount').textContent = open ? '(' + open + ')' : '';
+      var was = !bn.classList.contains('hidden');
       bn.className = 'banner';
-      if (s.needs_pin) { bn.classList.add('red'); bn.textContent = s.needs_pin + ' saved item(s) waiting for the incident PIN — tap to enter it'; bn.dataset.act = 'pin'; }
-      else if (s.failed) { bn.classList.add('red'); bn.textContent = s.failed + ' saved item(s) need attention — tap to see'; bn.dataset.act = 'list'; }
+      // short lines: the banner is one fixed-height line at 360+ px (My entries has the detail)
+      var items = function (n) { return plural(n, 'item'); }, need = function (n) { return n === 1 ? ' needs' : ' need'; };
+      if (s.needs_pin) { bn.classList.add('red'); bn.textContent = items(s.needs_pin) + need(s.needs_pin) + ' the incident PIN — tap to enter it'; bn.dataset.act = 'pin'; }
+      else if (s.failed) { bn.classList.add('red'); bn.textContent = items(s.failed) + need(s.failed) + ' attention — tap to see'; bn.dataset.act = 'list'; }
       else if (waiting) {
-        bn.classList.add('amber');
-        bn.textContent = waiting + ' saved item(s)' + (s.photos_waiting ? ', ' + s.photos_waiting + ' photo(s)' : '') + ' waiting to upload' + (navigator.onLine ? ' — uploading…' : ' — no signal. Open this app when you’re back in coverage.');
-        bn.dataset.act = 'list';
-      } else { bn.classList.add('hidden'); }
+        bn.classList.add('amber'); bn.dataset.act = 'list';
+        var what = items(waiting) + (s.photos_waiting ? ', ' + plural(s.photos_waiting, 'photo') : '');
+        if (!navigator.onLine) bn.textContent = what + ' waiting — no signal yet';
+        else if (up) bn.textContent = 'Uploading ' + what + '…';
+        else if (s.due) bn.textContent = what + ' waiting to upload — tap to send now';
+        else if (s.backoff) {
+          var sec = Math.max(1, Math.round((s.next_try - Date.now()) / 1000));
+          bn.textContent = what + ' waiting — next try in ' + (sec > 90 ? Math.round(sec / 60) + ' min' : sec + ' s');
+        } else bn.textContent = what + ' waiting for your answer';
+      } else if (s.sent || was || bn.dataset.kept === '1') {   // keep the line: no jump under a thumb
+        bn.classList.add('green'); bn.dataset.act = 'list'; bn.dataset.kept = '1';
+        bn.textContent = s.sent ? (s.sent === 1 ? 'Uploaded ✓ — nothing waiting' : 'All ' + s.sent + ' entries uploaded ✓ — nothing waiting') : 'Nothing waiting to upload ✓';
+      } else { bn.classList.add('hidden'); bn.dataset.act = ''; }
+      bn.title = bn.textContent;
+      var live = !bn.classList.contains('hidden') && !bn.classList.contains('green');
+      if (live && !bannerPoll) bannerPoll = setInterval(function () { if (document.visibilityState === 'visible') refreshStatus(); }, 4000);
+      if (!live && bannerPoll) { clearInterval(bannerPoll); bannerPoll = 0; }
       if (!$('savedOverlay').classList.contains('hidden')) renderSaved();
     });
   }
   function renderSaved() {
     Outbox.list().then(function (rs) {
+      if (document.querySelector('#savedList [data-armed="1"]')) return;   // a Discard / Remove waits for its second tap
       $('savedHint').textContent = rs.length ? 'Items stay here for a day after they upload.' : 'Nothing saved on this phone.';
       $('savedList').innerHTML = rs.map(function (r) {
         var t = typeObj(r.fields.observation_type), sent = r.photos.filter(function (p) { return p.status === 'sent'; }).length;
@@ -689,7 +743,10 @@
         if (r.status !== 'sent') acts += '<button class="link" data-act="retry" data-id="' + r.recon_id + '">Retry now</button>';
         if (r.status === 'failed' && r.error_code === 'incident_unknown') acts += '<button class="link" data-act="reinc" data-id="' + r.recon_id + '">File to the selected incident</button>';
         if (r.status === 'sent' && r.photos_failed) acts += '<button class="link" data-act="retry" data-id="' + r.recon_id + '">Retry photos</button>';
-        acts += '<button class="link" data-act="discard" data-id="' + r.recon_id + '">Discard</button>';
+        // 2026-11-06 (batch 13 polish): say what it deletes. An uploaded entry only leaves this phone; the server copy stays.
+        acts += r.status === 'sent'
+          ? '<button class="link" data-act="discard" data-sent="1" data-id="' + r.recon_id + '">Remove from this phone (the uploaded copy stays)</button>'
+          : '<button class="link link-danger" data-act="discard" data-id="' + r.recon_id + '">Discard (not uploaded yet)</button>';
         return '<div class="item"><div class="t">' + esc(title) + ' · ' + esc(r.incident ? r.incident.project_key : '') + '</div>' +
           '<div>' + new Date(r.created_at).toLocaleString() + (r.photo_count ? ' · ' + r.photo_count + ' photo(s)' : '') + '</div>' +
           '<div class="s ' + cls + '">' + esc(st) + '</div><div class="acts">' + acts + '</div></div>';
@@ -700,8 +757,16 @@
     var b = e.target.closest('[data-act]'); if (!b) return;
     var id = b.dataset.id, act = b.dataset.act;
     if (act === 'discard') {
-      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Tap again to discard — it is NOT uploaded'; setTimeout(function () { b.dataset.armed = ''; b.textContent = 'Discard'; }, 4000); return; }
-      Outbox.discard(id).then(renderSaved);
+      var sentOne = b.dataset.sent === '1';
+      if (b.dataset.armed !== '1') {   // confirm: a second tap within 4 s (the list doesn't redraw while one is armed)
+        var label = b.textContent; b.dataset.armed = '1';
+        b.textContent = sentOne ? 'Tap again to remove it from this phone — the uploaded copy stays' : 'Tap again to discard — it is NOT uploaded and will be lost';
+        setTimeout(function () { if (b.dataset.armed === '1') { b.dataset.armed = ''; b.textContent = label; } }, 4000); return;
+      }
+      b.dataset.armed = ''; busy(b, true, sentOne ? 'Removing…' : 'Discarding…');
+      Outbox.discard(id).then(function () {
+        toast(sentOne ? 'Removed from this phone. The uploaded copy stays on the incident.' : 'Discarded. It was never uploaded.', 5000); renderSaved();
+      });
     } else if (act === 'retry') { busy(b, true, 'Sending…'); Outbox.retry(id).then(function () { renderSaved(); }); }
     else if (act === 'reinc') {
       if (!S.incident) { toast('Pick an incident on the first screen first.'); return; }
@@ -837,7 +902,7 @@
     renderPhotos(); go(1);
   }
 
-  window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
+  window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, markBad: markBad, clearBad: clearBad, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
     openSafety: openSafety, linkTitle: linkTitle, checkin: checkin, SAFETY: SAFETY, URGENT: URGENT,
     downscale: downscale, typeObj: typeObj, POOR_GPS_M: POOR_GPS_M,   // the 214's "Put this on the map" (forms-ui.js)
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
