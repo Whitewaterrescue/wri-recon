@@ -43,8 +43,11 @@
     return Store.kvGet('config').then(function (cached) {
       if (cached) applyConfig(cached);
       return Api.getConfig().then(function (fresh) {
+        keepIncidents(fresh, cached);
         if (!cached || fresh.version !== cached.version || JSON.stringify(fresh.incidents) !== JSON.stringify(cached.incidents)) {
           return Store.kvSet('config', fresh).then(function () { applyConfig(fresh); });
+        } else if (fresh.incidents_at !== cached.incidents_at) {
+          return Store.kvSet('config', fresh);   // same lists: only when they were last confirmed (keepIncidents)
         }
       }).catch(function () {
         if (!cached) {
@@ -52,6 +55,35 @@
         }
       });
     });
+  }
+
+  /**
+   * 2026-11-05 (Cody: with the ArcGIS account blocked the server listed no incidents, and the form wiped its
+   * incident and said "No open incident"): an empty list keeps the incidents this phone had in the last 12 h,
+   * marked unconfirmed. The server still decides what a point may file to.
+   */
+  var KEEP_INC_MS = 12 * 3600 * 1000;
+  function keepIncidents(fresh, cached) {
+    if (!fresh) return;
+    if (fresh.incidents && fresh.incidents.length) {   // the server's own stand-ins (stale) don't count as confirmed
+      var ok = fresh.incidents.some(function (r) { return !r.stale; });
+      fresh.incidents_at = ok ? fresh.as_of || Date.now() : cached && cached.incidents_at;
+      return;
+    }
+    var had = cached && cached.incidents && cached.incidents.length ? cached.incidents : null;
+    var at = cached && (cached.incidents_at || cached.as_of);
+    if (!had || !at || Date.now() - at > KEEP_INC_MS) return;
+    fresh.incidents = had.map(function (r) { var o = JSON.parse(JSON.stringify(r)); o.stale = true; return o; });
+    fresh.incidents_at = at;
+  }
+  // the Field App's pick (wri_incident_choice) as an incident row, for when no list has one yet
+  function choiceIncident() {
+    try {
+      var c = JSON.parse(lsGet('wri_incident_choice') || 'null');
+      if (c && c.id && c.key && c.expires > Date.now()) return { incident_id: String(c.id), project_key: String(c.key),
+        client_name: String(c.client || '').toUpperCase(), incident_name: String(c.name || c.key), stale: true };
+    } catch (e) {}
+    return null;
   }
 
   function applyConfig(cfg) {
@@ -79,6 +111,7 @@
     var list = (S.cfg && S.cfg.incidents) || [], sel = $('incidentSel');
     var want = String(wantedIncident()).toLowerCase(), cur = S.incident && S.incident.incident_id;
     sel.innerHTML = '';
+    if (!list.length) { var ch = choiceIncident(); if (ch && S.cfg) { list = S.cfg.incidents = [ch]; } }
     if (!list.length) {
       sel.innerHTML = '<option value="">No open incident</option>';
       $('incidentHint').textContent = 'No incident is open. Points can only be saved to an open incident.';
@@ -99,7 +132,9 @@
     window.dispatchEvent(new Event('incident:changed'));
     if (r) lsSet('wri_recon_incident', r.incident_id);
     if (r) lsSet('wri_recon_incident_label', JSON.stringify({ id: r.incident_id, label: r.project_key + ' · ' + r.client_name }));
-    $('incidentHint').textContent = r ? 'Files to ' + r.project_key + ' (' + r.client_name + ').' : '';
+    $('incidentHint').textContent = !r ? '' : r.stale
+      ? 'Files to ' + r.project_key + ' (' + r.client_name + '). Couldn’t confirm the incident list just now; the point still saves and uploads.'
+      : 'Files to ' + r.project_key + ' (' + r.client_name + ').';
   }
 
   /**
