@@ -433,7 +433,7 @@
     urgRun = run;
     var L = URG_LABEL[kind];
     $('urgTitle').textContent = 'Send ' + L + ' alert?';
-    $('urgMsg').innerHTML = 'This alerts the <b>Incident Commander</b> and the <b>Safety Officer</b> (email, and a text where it is set up) and logs it to your log and the Safety unit log.' +
+    $('urgMsg').innerHTML = 'This alerts the <b>Incident Commander</b> and the <b>Safety Officer(s)</b> on the work chart and the HASP (email, and a text where it is set up) and logs it to your log and the Safety unit log.' +
       (navigator.onLine ? '' : '<br><b>No signal now: the alert goes out when signal returns.</b>') + '<br>Still radio them.';
     $('urgSend').textContent = 'Send ' + L + ' alert';
     $('urgDet').value = $('q214Det').value.trim();
@@ -457,9 +457,81 @@
   }
   function hhmm(iso) { var d = new Date(iso); return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   var RADIO = ' Radio your supervisor and the Safety Officer now.';
+  // 2026-11-06 (batch 13): the server's newest word on an alert: the last offline_alert_status answer, else the 214 upload's
+  function alertRes(al, r) {
+    var polled = al && al.res && al.res.state && al.res.state !== 'none' ? al.res : null;
+    return polled || (r && r.status === 'sent' && r.result && r.result.alert) || null;
+  }
+  // Who the alert went to, one row each: {name, position, source, status, via[], failed[], ack_at}.
+  // Logistics since batch 13 sends recipients[] (status sending | sent | failed | no_contact | acknowledged; source
+  // work_chart | checkin | hasp | desk, joined with '+'). Older servers: sent_to[] (reached) + not_reached[] (not reached,
+  // reason unknown: no email/phone on file, or the send failed).
+  var UNREACHED = { failed: 1, no_contact: 1, unreached: 1 };
+  function hasRecipients(res) { return !!(res && Array.isArray(res.recipients) && res.recipients.length); }
+  function alertPeople(res) {
+    var out = [];
+    if (hasRecipients(res)) {
+      res.recipients.forEach(function (x) {
+        if (!x || !x.name || x.cc) return;
+        var st = String(x.status || '').toLowerCase();
+        st = x.acknowledged || st === 'acked' || st === 'acknowledged' ? 'acked' : UNREACHED[st] || st === 'sending' ? st : 'sent';
+        out.push({ name: String(x.name), position: x.position || x.role || '', source: String(x.source || ''), status: st,
+          via: Array.isArray(x.via) ? x.via : [], failed: Array.isArray(x.failed) ? x.failed : [], ack_at: x.ack_at || '' });
+      });
+      return out;
+    }
+    ((res && res.sent_to) || []).forEach(function (x) { out.push({ name: x.name, position: x.position || x.role || '', source: '', status: 'sent', via: x.via || [], failed: [] }); });
+    ((res && res.not_reached) || []).forEach(function (x) { out.push({ name: x.name, position: x.position || x.role || '', source: '', status: 'unreached', via: [], failed: [] }); });
+    return out;
+  }
+  function unreached(ppl) { return ppl.filter(function (x) { return UNREACHED[x.status]; }); }
+  function reachedOrSending(ppl) { return ppl.filter(function (x) { return !UNREACHED[x.status]; }); }
+  function ackList(al, res) {   // everyone who acknowledged: [{name, position, at}]
+    if (res && Array.isArray(res.acknowledged_by) && res.acknowledged_by.length) return res.acknowledged_by.filter(function (x) { return x && x.name; });
+    var p = alertPeople(res).filter(function (x) { return x.status === 'acked'; }).map(function (x) { return { name: x.name, position: x.position, at: x.ack_at }; });
+    if (p.length) return p;
+    var one = (al && al.ack) || (res && res.ack && res.ack.name ? res.ack : null);
+    return one ? [one] : [];
+  }
+  function alertAck(al, res) { return ackList(al, res)[0] || null; }   // the first acknowledgement, or null
+  // finished: everyone who could be reached acknowledged (an older server: the first acknowledgement)
+  function allAcked(al, res) {
+    if (!hasRecipients(res)) return !!alertAck(al, res);
+    var reach = reachedOrSending(alertPeople(res));
+    return !!reach.length && reach.every(function (x) { return x.status === 'acked'; });
+  }
+  function isDesk(p) { return /(^|\+)desk(\+|$)/.test(p.source || '') || /alert desk/i.test(p.position || ''); }
+  function failLine(failed) {
+    return failed.length ? '<div class="a-fail">Couldn’t reach ' + A.esc(nameList(failed)) + ' — radio or call them now.</div>' : '';
+  }
+  function chip(p) {
+    var via = (p.via || []).join(' + '), bad = (p.failed || []).join(' + ');
+    var t = p.status === 'acked' ? ['ok', 'Acknowledged' + (p.ack_at ? ' ' + hhmm(p.ack_at) : '')]
+      : p.status === 'sent' ? [bad ? 'warn' : 'sent', 'Sent' + (via ? ' by ' + via : '') + (bad ? ' · ' + bad + ' failed' : '')]
+      : p.status === 'sending' ? ['warn', 'Sending…']
+      : p.status === 'failed' ? ['bad', 'Could not send' + (bad ? ' (' + bad + ')' : '')]
+      : p.status === 'no_contact' ? ['bad', 'No email or phone'] : ['bad', 'Not reached'];
+    return '<span class="a-chip c-' + t[0] + '">' + A.esc(t[1]) + '</span>';
+  }
+  function peopleList(res) {   // one line per person (newer servers only: older ones say less than the headline)
+    if (!hasRecipients(res)) return '';
+    return '<ul class="a-ppl">' + alertPeople(res).map(function (p) {
+      var src = /(^|\+)hasp(\+|$)/.test(p.source) ? ' · from the HASP' : isDesk(p) ? ' · alert desk' : '';
+      return '<li><span class="a-who">' + A.esc(p.name) + (p.position ? ' (' + A.esc(p.position) + ')' : '') +
+        (src ? '<span class="a-src">' + A.esc(src) + '</span>' : '') + '</span>' + chip(p) + '</li>';
+    }).join('') + '</ul>';
+  }
+  function ackText(acks) {
+    return acks.map(function (k) { return k.name + (k.at ? ' at ' + hhmm(k.at) : ''); }).join(', ');
+  }
   function alertState(al, r) {   // {cls, html, done}
-    var res = r && r.status === 'sent' ? (r.result && r.result.alert) : null, ack = (al && al.ack) || (res && res.ack);
-    if (ack) return { cls: 'ok', done: true, html: '<b>Acknowledged by ' + A.esc(ack.name) + (ack.at ? ' at ' + hhmm(ack.at) : '') + '.</b>' };
+    var res = alertRes(al, r), ppl = alertPeople(res), acks = ackList(al, res), failed = unreached(ppl);
+    var late = !!r && Date.now() - (r.sent_at || al.at) > ALERT_POLL_MS;
+    if (acks.length) {
+      var all = allAcked(al, res);
+      return { cls: failed.length ? 'warn' : 'ok', done: all || late, html: '<b>Acknowledged by ' + A.esc(ackText(acks)) + '.</b>' + peopleList(res) + failLine(failed) +
+        (all || late ? '' : '<span class="spin"></span>Waiting for the others to acknowledge…') };
+    }
     if (!r) return { cls: 'bad', done: true, html: '<b>This alert is no longer saved on the phone.</b>' + RADIO };
     if (r.status === 'needs_pin') return { cls: 'bad', html: '<b>Not sent yet: it is waiting for the incident PIN.</b>' + RADIO };
     if (r.status === 'failed') return { cls: 'bad', html: '<b>The alert could not be sent</b> (' + A.esc(r.last_error || 'error') + ').' + RADIO };
@@ -467,19 +539,46 @@
       ? { cls: 'warn', html: '<span class="spin"></span><b>Sending the alert…</b>' + RADIO }
       : { cls: 'bad', html: '<b>No signal: the alert goes out when signal returns.</b>' + RADIO };
     if (!res) return { cls: 'bad', done: true, html: '<b>Saved to the Safety unit log, but no alert went out</b> (the server is not updated yet).' + RADIO };
-    var to = res.sent_to || [];
-    if (!to.length) return { cls: 'bad', done: true, html: '<b>Nobody could be alerted.</b> ' + A.esc(res.error || '') + RADIO };
-    var late = Date.now() - (r.sent_at || al.at) > ALERT_POLL_MS;
-    return { cls: 'warn', done: late, html: '<b>Alert sent to ' + A.esc(nameList(to)) + '.</b> ' +
-      (late ? 'No acknowledgement after 30 minutes.' : '<span class="spin"></span>Waiting for acknowledgement…') + ' Still radio them.' +
-      (res.not_reached && res.not_reached.length ? ' Could not reach ' + A.esc(nameList(res.not_reached)) + ' (no email or phone on file).' : '') };
+    var to = ppl.filter(function (x) { return x.status === 'sent'; });
+    var sending = res.state === 'sending' || ppl.some(function (x) { return x.status === 'sending'; });
+    if (!to.length && sending) return { cls: 'warn', html: '<span class="spin"></span><b>Sending the alert…</b>' + peopleList(res) + failLine(failed) + RADIO };
+    if (!to.length) return { cls: 'bad', done: true, html: '<b>Nobody could be alerted.</b> ' + A.esc(res.error || '') + peopleList(res) + failLine(failed) + RADIO };
+    // the fallback desk only: nobody on the work chart / HASP as IC or Safety Officer could be emailed or texted
+    var deskOnly = !!res.fallback || to.every(isDesk);
+    return { cls: deskOnly || failed.length ? 'bad' : 'warn', done: late, html: '<b>Alert sent to ' + A.esc(nameList(to)) + '.</b> ' +
+      (deskOnly ? (failed.length ? 'Only the Safety alert desk got it.' : '<div class="a-fail">Nobody on the work chart as Incident Commander or Safety Officer ' +
+        'could be emailed or texted, so only the Safety alert desk got it — radio or call the IC and Safety Officer now.</div>') : '') +
+      peopleList(res) + failLine(failed) +
+      (late ? 'No acknowledgement after 30 minutes.' : '<span class="spin"></span>Waiting for acknowledgement…') + ' Still radio them.' };
   }
   function alertLine(r) {   // the short version in "My entries today"
-    var al = alertOf(r.recon_id), res = r.status === 'sent' && r.result && r.result.alert, ack = (al && al.ack) || (res && res.ack);
-    var t = ack ? 'Alert acknowledged by ' + ack.name + (ack.at ? ' at ' + hhmm(ack.at) : '')
-      : res && (res.sent_to || []).length ? 'Alert sent to ' + nameList(res.sent_to) + ', not acknowledged yet'
+    var al = alertOf(r.recon_id), res = alertRes(al, r), acks = ackList(al, res);
+    var ppl = alertPeople(res), to = ppl.filter(function (x) { return x.status === 'sent' || x.status === 'acked'; }), failed = unreached(ppl);
+    var t = acks.length ? 'Alert acknowledged by ' + ackText(acks)
+      : to.length ? 'Alert sent to ' + nameList(to) + ', not acknowledged yet'
       : r.status === 'sent' ? 'No alert went out: radio them' : 'Alert waiting to go out';
-    return '<div class="s ' + (ack ? 'green' : 'red') + '">' + A.esc(t) + '</div>';
+    if (failed.length) t += '. Couldn’t reach ' + nameList(failed) + ': radio or call them';
+    return '<div class="s ' + (acks.length && !failed.length ? 'green' : 'red') + '">' + A.esc(t) + '</div>';
+  }
+  // The alert's live status for any screen (the recon Save screen uses it): {cls, html, done}, or null if it isn't tracked
+  function alertView(id) {
+    var al = alertOf(id);
+    if (!al) return Promise.resolve(null);
+    return Store.get('records', id).then(function (r) { var t = alertState(al, r); t.kind = al.kind; t.at = al.at; return t; });
+  }
+  function alertChanged(id) { try { window.dispatchEvent(new CustomEvent('alert:changed', { detail: { id: id } })); } catch (e) {} }
+  function gotRes(id, d) {   // keep the newest offline_alert_status answer (who was reached, who failed, who acknowledged)
+    if (!d || !d.state || d.state === 'none') return;
+    var a = alerts(), hit = a.filter(function (x) { return x.id === id; })[0];
+    if (!hit) return;
+    var was = JSON.stringify(hit.res || null);
+    hit.res = { state: d.state, fallback: !!d.fallback, error: d.error || '', sent_to: d.sent_to || [], not_reached: d.not_reached || [],
+      recipients: Array.isArray(d.recipients) ? d.recipients : undefined, acknowledged_by: Array.isArray(d.acknowledged_by) ? d.acknowledged_by : undefined,
+      ack: d.ack || null };
+    if (allAcked(hit, hit.res)) hit.fin = true;   // everyone reachable has acknowledged: polling stops
+    if (JSON.stringify(hit.res) === was) { if (hit.fin) saveAlerts(a); return; }
+    saveAlerts(a); renderAlert(); alertChanged(id);
+    if (view === '214') renderMine('214', $('l214List'));
   }
   function renderAlert() {
     var al = currentAlert(), box = $('l214Alert');
@@ -491,27 +590,43 @@
         (t.done ? '<button type="button" class="btn btn-ghost a-hide" data-id="' + A.esc(al.id) + '">Hide</button>' : '');
     }).catch(function () {});
   }
-  function gotAck(id, ack) {
+  function gotAck(id, ack) {   // the first acknowledgement: kept + a toast (later ones show in the list)
     var a = alerts(), hit = a.filter(function (x) { return x.id === id; })[0];
     if (!hit || hit.ack) return;
     hit.ack = { name: ack.name, at: ack.at }; saveAlerts(a);
     A.toast('Acknowledged by ' + ack.name + (ack.at ? ' at ' + hhmm(ack.at) : '') + '.', 8000);
-    renderAlert(); if (view === '214') renderMine('214', $('l214List'));
+    renderAlert(); alertChanged(id); if (view === '214') renderMine('214', $('l214List'));
   }
-  function pollAlert() {   // gently: every 20 s while the app is open, until acknowledged or 30 min
+  function markFin(id) {
+    var a = alerts(), hit = a.filter(function (x) { return x.id === id; })[0];
+    if (hit && !hit.fin) { hit.fin = true; saveAlerts(a); }
+  }
+  // still asking: not everyone reachable acknowledged yet (an alert kept before batch 13: until its first acknowledgement)
+  function stillOpen(x) { return !x.fin && !(x.ack && !hasRecipients(x.res)) && Date.now() - x.at < ALERT_SHOW_MS; }
+  function pollAlert() {   // gently: every 20 s while the app is open, until everyone acknowledged or 30 min
     if (alertPolling || !navigator.onLine || document.visibilityState === 'hidden') return;
-    var al = alerts().filter(function (x) { return !x.ack && Date.now() - x.at < ALERT_SHOW_MS; }).pop();
+    var al = alerts().filter(stillOpen).pop();
     if (!al) return;
     alertPolling = true;
     Store.get('records', al.id).then(function (r) {
-      var res = r && r.status === 'sent' && r.result && r.result.alert;
-      if (!res || !(res.sent_to || []).length) return;
-      if (res.ack) return gotAck(al.id, res.ack);
+      if (!r || r.status !== 'sent') return;
+      var res = alertRes(al, r);
+      if (!res) return;
+      var k = alertAck(null, res);
+      if (k) gotAck(al.id, k);
+      if (allAcked(alertOf(al.id), res)) return markFin(al.id);
+      // nobody reached and nothing still sending: there is nothing to acknowledge
+      if (res.state !== 'sending' && !reachedOrSending(alertPeople(res)).length) return;
       if (Date.now() - (r.sent_at || al.at) > ALERT_POLL_MS) return;
       return Promise.all([Outbox.pinFor(al.inc), Store.deviceId()]).then(function (a) {
         if (!a[0]) return;
         return Api.post('offline_alert_status', { pin: a[0], device: a[1], id: al.id, incident_id: al.inc }, 20000, CONFIG.LOGISTICS_API)
-          .then(function (d) { if (d && d.ack) gotAck(al.id, d.ack); });
+          .then(function (d) {
+            if (!d || !d.state || d.state === 'none') return;
+            var ack = alertAck(null, d);
+            if (ack) gotAck(al.id, ack);
+            gotRes(al.id, d);
+          });
       });
     }).catch(function () {}).then(function () { alertPolling = false; });
   }
@@ -651,7 +766,21 @@
     $('haspBody').scrollTop = 0;
     $('haspAcked').textContent = (h.acked || []).length ? 'Already signed: ' + h.acked.join(', ') : 'Nobody has signed yet.';
     fillNames($('haspName'), $('haspOtherBox'), $('haspOther'), true);
+    renderHaspWho();
     $('haspRead').checked = false; clearSig(); sizeSig();
+  }
+  // 2026-11-06 (batch 13, persona test): the sign-off only ever signed as the name already on the phone. Say who signs,
+  // and "Not you?" clears it so the person holding the phone picks (or types) their own name first (the 214's pattern).
+  function renderHaspWho() {
+    var who = pickedName($('haspName'), $('haspOther'));
+    $('haspWho').classList.toggle('hidden', !who);
+    $('haspWhoTxt').innerHTML = 'Signing as <b>' + A.esc(who) + '</b>';
+  }
+  function haspNotMe() {
+    notMe = true; A.lsSet('wri_recon_name', '');
+    $('haspName').value = ''; $('haspOther').value = ''; $('haspOtherBox').classList.add('hidden');
+    renderHaspWho(); $('haspName').focus();
+    A.toast('Pick your name (or Other… to type it), then sign.', 5000);
   }
   function sizeSig() {
     var c = $('sigPad'), r = c.getBoundingClientRect();
@@ -854,7 +983,9 @@
     $('rrSave').addEventListener('click', saveRr);
     $('haspList').addEventListener('click', function (e) { var b = e.target.closest('.hasp-item'); if (b) openHaspDetail(haspsForIncident()[Number(b.dataset.i)]); });
     $('haspBack').addEventListener('click', function () { openHasp = null; renderHasp(); });
-    $('haspName').addEventListener('change', function () { $('haspOtherBox').classList.toggle('hidden', this.value !== '__other__'); });
+    $('haspName').addEventListener('change', function () { $('haspOtherBox').classList.toggle('hidden', this.value !== '__other__'); renderHaspWho(); });
+    $('haspOther').addEventListener('input', renderHaspWho);
+    $('haspNotMe').addEventListener('click', haspNotMe);
     $('haspSave').addEventListener('click', saveHasp);
     $('sigClear').addEventListener('click', clearSig);
     var pad = $('sigPad');
@@ -891,6 +1022,8 @@
   }
   window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); }, safetyFromRecon: safetyFromRecon,
     logFromRecon: logFromRecon,
+    // 2026-11-06 (batch 13): the recon Save screen shows a safety point's alert live (js/app.js renderDone)
+    alertView: alertView, pollAlert: function () { pollAlert(); },
     // 2026-11-05 (batch 11): open one HASP to sign (the phone's cached copy, else the Field App's stub); returns it
     openHasp: function (id, stub) {
       var all = [];

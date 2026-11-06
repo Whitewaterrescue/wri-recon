@@ -29,8 +29,11 @@
   function incId() { return String((A && A.S.incident && A.S.incident.incident_id) || INC || ''); }
   function sameName(a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); }
   function mine(rs) {   // this plan's newest sign-off on this phone (by the checked-in name when there is one)
+    // 2026-11-06 (batch 13): or by whoever signed after "Not you?" (the sign-off keeps their name in wri_recon_name)
+    var signer = ''; try { signer = localStorage.getItem('wri_recon_name') || ''; } catch (e) {}
     return (rs || []).filter(function (r) {
-      return r.kind === 'hasp' && r.fields && String(r.fields.haspId) === HASP_ID && (!NAME || sameName(r.fields.employeeName, NAME));
+      return r.kind === 'hasp' && r.fields && String(r.fields.haspId) === HASP_ID &&
+        (!NAME || sameName(r.fields.employeeName, NAME) || (signer && sameName(r.fields.employeeName, signer)));
     }).sort(function (x, y) { return y.created_at - x.created_at; })[0] || null;
   }
   function post(m) {
