@@ -321,7 +321,7 @@
       row('Task force', $('tfName').value + ($('tfStatus').value ? ' (' + $('tfStatus').value + ')' : '')) +
       row('Location', S.lat != null ? S.lat.toFixed(6) + ', ' + S.lon.toFixed(6) + (S.acc != null ? ' ± ' + S.acc + ' m' + (S.acc > POOR_GPS_M ? ' (weak fix: check it on the map)' : '') : '') : '') +
       row('Photos', String(S.photos.length)) +
-      (sk ? row('Also', URGENT[sk] ? 'Emails the Incident Commander and Safety Officer now and logs it to the Safety unit log as ' + SAFETY[sk].toLowerCase() + '.' +
+      (sk ? row('Also', URGENT[sk] ? 'Alerts the Incident Commander and Safety Officer(s) on the work chart and HASP now (email, and a text where set up) and logs it to the Safety unit log as ' + SAFETY[sk].toLowerCase() + '.' +
           (SAFETY[S.type] ? ' Command staff signed up for ' + SAFETY[sk].toLowerCase() + ' alerts get a text.' : '')
         : 'Logs it to the Safety unit log. Command staff signed up for near miss alerts get a text.') : '');
   }
@@ -358,13 +358,13 @@
       }
     };
     if (S.isWri === 'yes') lsSet('wri_recon_name', reporterName());
-    var droneGroup = S.droneGroup, safety = safetyKind();
+    var droneGroup = S.droneGroup, safety = safetyKind(), alertId = '';
     Outbox.enqueue(rec, S.photos.map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta || '' }; })).then(function () {
       lsSet(DRAFT_KEY, '');   // saved: nothing left to pick up
       // 2026-11-05 (batch 11): a Stop work / Injury / Near miss point also goes to the Safety 214 (forms-ui.js safetyFromRecon):
       // stop work + injury as the urgent alert (IC + Safety Officer emailed now), a near miss as a plain Safety unit-log entry
       if (safety && window.WRIForms && WRIForms.safetyFromRecon) {
-        return WRIForms.safetyFromRecon(rec, safety).catch(function (e) { toast('The point is saved, but the Safety 214 could not be: ' + e.message + '. Radio the Safety Officer.', 10000); });
+        return WRIForms.safetyFromRecon(rec, safety).then(function (r) { if (r && URGENT[safety]) alertId = r.recon_id; }, function (e) { toast('The point is saved, but the Safety 214 could not be: ' + e.message + '. Radio the Safety Officer.', 10000); });
       }
       if (log214) {
         return WRIForms.logFromRecon(rec, t.label || S.type).catch(function (e) { toast('The point is saved, but its 214 line could not be: ' + e.message, 8000); });
@@ -372,7 +372,7 @@
     }).then(function () {
       busy(b, false);
       if (droneGroup) window.dispatchEvent(new CustomEvent('recon:saved', { detail: { recon_id: rec.recon_id, drone_group: droneGroup } }));
-      showDone(rec.recon_id, safety, !!SAFETY[rec.fields.observation_type]);
+      showDone(rec.recon_id, safety, !!SAFETY[rec.fields.observation_type], alertId);
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
     }, function (e) {
       busy(b, false); toast('Could not save on this phone: ' + e.message + '. Free up storage and try again.', 8000);
@@ -536,16 +536,36 @@
   // Live status for the point: Submitted once it's up, or saved on the phone when there's no signal; then the form
   // clears itself (~2.5 s). Photos still uploading carry on in the background (My entries shows them).
   var DONE_MS = 2500, SLOW_MS = 10000, done = null;
-  function showDone(id, safety, texts) {   // texts: the point's type is the safety type (the SMS app keys on it)
+  // 2026-11-06 (batch 13): a Stop work / Injury point (alertId = its Safety 214's id) shows the alert's real status, live
+  // (Sending… -> sent to / couldn't reach -> acknowledged, forms-ui.js alertView) and stays up until the tech taps Done.
+  function showDone(id, safety, texts, alertId) {   // texts: the point's type is the safety type (the SMS app keys on it)
     endDone();
-    done = { id: id, safety: safety, texts: texts, t0: Date.now() };
+    done = { id: id, safety: safety, texts: texts, alertId: alertId || '', t0: Date.now() };
     done.slow = setTimeout(renderDone, SLOW_MS);
+    if (done.alertId && window.WRIForms && WRIForms.pollAlert) {   // ask the server sooner than the 214 tab's 20 s
+      done.poll = setInterval(function () { WRIForms.pollAlert(); }, 8000);
+      done.kick = setTimeout(function () { WRIForms.pollAlert(); }, 3000);
+    }
+    $('newBtn').textContent = done.alertId ? 'Done' : 'New point';
+    $('doneAlert').classList.add('hidden'); $('doneAlert').innerHTML = '';
     $('doneOverlay').classList.remove('hidden');
     renderDone();
   }
   function endDone() {
-    if (done) { clearTimeout(done.slow); clearTimeout(done.auto); }
+    if (done) { clearTimeout(done.slow); clearTimeout(done.auto); clearInterval(done.poll); clearTimeout(done.kick); }
     done = null; $('doneOverlay').classList.add('hidden');
+  }
+  var URG_TITLE = { stop_work: 'STOP WORK', injury: 'INJURY' };
+  function renderDoneAlert() {
+    var dn = done, box = $('doneAlert');
+    if (!dn || !dn.alertId || !window.WRIForms || !WRIForms.alertView) { box.classList.add('hidden'); return; }
+    WRIForms.alertView(dn.alertId).then(function (t) {
+      if (dn !== done) return;
+      if (!t) { box.classList.add('hidden'); return; }
+      box.className = 'alert214 done-alert a-' + t.cls;
+      box.innerHTML = '<div class="a-t">' + esc((URG_TITLE[t.kind] || 'Safety') + ' alert') + '</div><div class="a-b">' + t.html + '</div>';
+      $('doneOverlay').dataset.alert = t.cls;
+    }).catch(function () {});
   }
   function renderDone() {
     if (!done) return;
@@ -557,7 +577,8 @@
       var L = dn.safety ? SAFETY[dn.safety].toLowerCase() : '', icon = '✅', title, sub = '', more = '';
       if (st === 'sent') {
         title = 'Submitted';
-        if (dn.safety) sub = (URGENT[dn.safety] ? 'The Incident Commander and Safety Officer are being emailed. ' : 'It goes on the Safety unit log. ') +
+        // batch 13: who the alert reached is the alert box's job (the server's answer), never assumed here
+        if (dn.safety) sub = (URGENT[dn.safety] ? '' : 'It goes on the Safety unit log. ') +
           (dn.texts ? 'Command staff signed up for ' + L + ' alerts get a text within 5 minutes.' : '');
         if (r && r.photo_count && r.status !== 'sent') more = 'Photos keep uploading in the background (My entries shows them).';
       } else if (st === 'sending') {
@@ -572,8 +593,9 @@
       $('doneIcon').innerHTML = icon; $('doneTitle').textContent = title; $('doneSub').textContent = sub;
       $('doneMore').textContent = more; $('doneMore').classList.toggle('hidden', !more);
       $('doneOverlay').dataset.state = st;
-      // a final answer: clear the form shortly (a failure waits for the tech to read it)
-      if (st !== 'sending' && st !== 'failed' && !dn.auto) dn.auto = setTimeout(function () { if (dn === done) resetForm(); }, DONE_MS + (more ? 1500 : 0));
+      renderDoneAlert();
+      // a final answer: clear the form shortly (a failure waits for the tech to read it; so does an alert's status)
+      if (st !== 'sending' && st !== 'failed' && !dn.auto && !dn.alertId) dn.auto = setTimeout(function () { if (dn === done) resetForm(); }, DONE_MS + (more ? 1500 : 0));
     }).catch(function () {});
   }
 
@@ -772,8 +794,9 @@
     try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 
     window.addEventListener('outbox:changed', function () { refreshStatus(); renderDone(); });
-    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.type === 'outbox:changed') refreshStatus(); });
-    window.addEventListener('online', function () { initMap(); wakeKick(); });
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.type === 'outbox:changed') { refreshStatus(); renderDone(); } });
+    window.addEventListener('alert:changed', renderDoneAlert);   // batch 13: a poll answer (reached / failed / acknowledged)
+    window.addEventListener('online', function () { initMap(); wakeKick(); renderDone(); });
     window.addEventListener('offline', function () { refreshStatus(); renderDone(); });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
