@@ -136,7 +136,122 @@
     if (!who) return A.toast('Pick your name.');
     if (!act) return A.toast('Write the activity.');
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
-    write214(who, act, at, $('l214Save'), true, $('l214Unit').checked);
+    var pt = mPoint(); if (typeof pt === 'string') return A.toast(pt, 5000);
+    write214(who, act, at, $('l214Save'), true, $('l214Unit').checked, null, '', pt);
+  }
+
+  // ---------- "Put this on the map" (2026-11-06, Cody: the 214 and recon were double duty) ----------
+  // One 214 entry can also be a recon point. One save puts both in the outbox: the point as recon_id R (its
+  // photos with it, to the Recon API) and then the 214 as map-R (Logistics offline_214). The Ops 201
+  // "Pull from the field" shows the pair as one line. Location: GPS when the box opens; the map is for marking a
+  // spot you aren't standing on (the boom across the river).
+  var M = { on: false, touched: false, type: '', lat: null, lon: null, acc: null, photos: [], map: null, marker: null };
+  function mHere(beforeId) { var b = $(beforeId); if (b && $('m214').nextElementSibling !== b) b.parentNode.insertBefore($('m214'), b); }
+  function mTypes() {
+    var types = ((S.cfg && S.cfg.types) || []).filter(function (t) { return t.category !== 'Safety'; }), cats = [];
+    types.forEach(function (t) { if (cats.indexOf(t.category) < 0) cats.push(t.category); });
+    $('m214Type').innerHTML = !types.length ? '<option value="">Lists not loaded yet: open once with signal</option>' :
+      '<option value="">Pick what it is…</option>' + cats.map(function (c) {
+        return '<optgroup label="' + A.esc(c) + '">' + types.filter(function (t) { return t.category === c; }).map(function (t) {
+          return '<option value="' + A.esc(t.code) + '">' + A.esc(t.label) + '</option>';
+        }).join('') + '</optgroup>';
+      }).join('');
+    $('m214Type').value = M.type || '';
+    if ($('m214Type').value !== (M.type || '')) M.type = '';   // a type this incident's list doesn't have
+  }
+  function mSet(on, type) {   // tick / untick; type: preset the recon type (undefined keeps the pick)
+    M.on = !!on; $('m214On').checked = M.on;
+    if (type !== undefined) M.type = type || '';
+    $('m214Box').classList.toggle('hidden', !M.on);
+    if (M.on) { mTypes(); if (M.lat == null && !mGps.busy) mGps(); }
+  }
+  function mGps() {
+    var b = $('m214Gps');
+    if (!navigator.geolocation) { A.toast('This phone has no GPS access. Mark the spot on the map.'); return; }
+    mGps.busy = true; A.busy(b, true, 'Getting location…');
+    navigator.geolocation.getCurrentPosition(function (p) {
+      mGps.busy = false; A.busy(b, false);
+      var poor = p.coords.accuracy > A.POOR_GPS_M;
+      b.classList.toggle('ok', !poor);
+      b.textContent = poor ? 'Weak GPS fix (± ' + Math.round(p.coords.accuracy) + ' m): tap to try again' : 'Location captured ✓ (tap to refresh)';
+      mLoc(p.coords.latitude, p.coords.longitude, p.coords.accuracy, 'gps');
+    }, function (e) {
+      mGps.busy = false; A.busy(b, false);
+      A.toast('No GPS fix (' + e.message + '). Step outside and try again, or mark the spot on the map.', 6000);
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+  }
+  function mLoc(lat, lon, acc, from) {
+    M.lat = Number(lat); M.lon = Number(lon); M.acc = acc == null ? null : Math.round(acc);
+    $('m214Coords').textContent = M.lat.toFixed(6) + ', ' + M.lon.toFixed(6) + (M.acc != null ? '  ± ' + M.acc + ' m' : '  (marked on the map)');
+    if (!M.map) return;
+    var ll = [M.lat, M.lon];
+    if (!M.marker) M.marker = L.circleMarker(ll, { radius: 9, color: '#fff', weight: 2, fillColor: '#EC2329', fillOpacity: 1 }).addTo(M.map);
+    else M.marker.setLatLng(ll);
+    if (from !== 'map') M.map.setView(ll, Math.max(M.map.getZoom(), 16));
+  }
+  function mMap() {
+    if (typeof L === 'undefined' || !navigator.onLine) { A.toast('The map needs signal. GPS works without it.'); return; }
+    $('m214MapWrap').classList.remove('hidden');
+    if (!M.map) {
+      var inc = S.cfg && S.cfg.incidents && S.cfg.incidents.filter(function (r) { return S.incident && r.incident_id === S.incident.incident_id; })[0];
+      var c = M.lat != null ? [M.lat, M.lon] : (inc && inc.lat != null) ? [inc.lat, inc.lon] : [46.87, -113.99];
+      M.map = L.map('m214Map', { zoomControl: true, attributionControl: true }).setView(c, 16);
+      L.tileLayer(CONFIG.TILE_URL, { maxZoom: 19, attribution: 'Esri, Maxar' }).addTo(M.map);
+      M.map.on('click', function (e) { mLoc(e.latlng.lat, e.latlng.lng, null, 'map'); });
+      if (M.lat != null) mLoc(M.lat, M.lon, M.acc, 'restore');
+    }
+    setTimeout(function () { M.map.invalidateSize(); }, 50);
+    A.toast('Tap the spot on the map.');
+  }
+  function mPhotos(input) {
+    var files = [].slice.call(input.files || []); input.value = '';
+    var room = CONFIG.MAX_PHOTOS - M.photos.length;
+    if (files.length > room) A.toast('Up to ' + CONFIG.MAX_PHOTOS + ' photos per point.');
+    files.slice(0, Math.max(0, room)).reduce(function (p, f) {
+      return p.then(function () { return A.downscale(f); }).then(function (blob) {
+        M.photos.push({ blob: blob, name: f.name || 'photo.jpg', url: URL.createObjectURL(blob) }); mRenderPhotos();
+      }).catch(function (e) { A.toast(e.message); });
+    }, Promise.resolve());
+  }
+  function mRenderPhotos() {
+    $('m214Photos').innerHTML = M.photos.map(function (p, i) {
+      return '<div class="ph"><img src="' + p.url + '" alt=""><button type="button" class="rm" data-i="' + i + '">×</button></div>';
+    }).join('');
+  }
+  function mReset() {   // after a save: the next entry starts as a plain 214 at a new spot
+    M.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+    M.photos = []; M.lat = M.lon = M.acc = null; M.touched = false;
+    if (M.marker && M.map) { M.map.removeLayer(M.marker); M.marker = null; }
+    $('m214Coords').textContent = 'No location yet'; $('m214Gps').textContent = 'Use My Location'; $('m214Gps').classList.remove('ok');
+    $('m214MapWrap').classList.add('hidden');
+    mRenderPhotos(); mSet(false, '');
+  }
+  // null = no point; a string = what's missing; else the point to save
+  function mPoint() {
+    if (!M.on) return null;
+    if (!M.type) return 'Pick what it is for the map point, or untick “Put this on the map”.';
+    if (M.lat == null) return mGps.busy ? 'Still getting your location. Try again in a moment, or mark the spot on the map.'
+      : 'The map point needs a location: tap Use My Location or mark the spot on the map.';
+    return { type: M.type, lat: M.lat, lon: M.lon, photos: M.photos.slice() };
+  }
+  function pointRec(pt, id, who, act, at) {
+    var t = (A.typeObj && A.typeObj(pt.type)) || {};
+    return { recon_id: id, incident: S.incident, fields: {
+      latitude: pt.lat, longitude: pt.lon, observation_epoch: at, is_wri: 'yes', reporter_name: who,
+      reporter_affiliation: '', affiliation_desc: '', observation_category: t.category || '', observation_type: pt.type,
+      observation_subtype: '', description: act, tf_name_raw: '', tf_status_raw: '' } };
+  }
+
+  // The recon form's "Also log it in my 214" (2026-11-06): the point's line in the reporter's 214 and unit log,
+  // id map-<recon_id> like an entry made here. Safety types never come here (safetyFromRecon writes theirs).
+  function logFromRecon(rec, label) {
+    var f = rec.fields || {}, who = String(f.reporter_name || '').trim(), desc = String(f.description || '').trim();
+    if (!who) return Promise.resolve(null);
+    var r = { recon_id: 'map-' + rec.recon_id, kind: '214', incident: rec.incident, hold_until: 0,
+              fields: { person: who, position: myPosition(who), activity: label + (desc ? ': ' + desc : '') + ' (on map)',
+                        at: f.observation_epoch || Date.now(), also_unit: true, section: A.lsGet('wri_214_section') || '',
+                        default_section: 'operations', recon_id: rec.recon_id } };
+    return Outbox.enqueue(r, []).then(function () { if (view === '214') renderMine('214', $('l214List')); return r; });
   }
   // Where a unit-log entry lands. "Auto" = the person's section on the work chart, Operations when
   // they aren't on it (lgOffline214_ default_section). Riley and Jordan (2026-11-03/04 walkthroughs)
@@ -156,18 +271,30 @@
     $('l214WhoTxt').innerHTML = 'Logging as <b>' + A.esc(who) + '</b>';
   }
   // urgent: '' or the alert kind (stop_work | injury | near_miss): the server alerts the IC + Safety Officer (2026-11-04, batch 7)
-  function write214(who, act, at, btn, clearAct, unit, done, urgent) {   // unit: also post to the unit log (default: my own 214A only)
+  // pt: "Put this on the map" (mPoint): the recon point saved first, then the 214 with linked = map-<its id>
+  function write214(who, act, at, btn, clearAct, unit, done, urgent, pt, linked) {   // unit: also post to the unit log (default: my own 214A only)
     if (urgent) unit = true;
+    if (pt && !urgent) {
+      var pid = A.uuid();
+      A.busy(btn, true, 'Saving…');
+      return Outbox.enqueue(pointRec(pt, pid, who, act, at), pt.photos.map(function (p) { return { blob: p.blob, name: p.name, meta: '' }; }))
+        .then(function () {
+          A.busy(btn, false); mReset();
+          write214(who, act + ' (on map)', at, btn, clearAct, unit, done, '', null, 'map-' + pid);
+        }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message + '. Free up storage and try again.', 8000); });
+    }
     var quiet = !unit && noAskToday(who);   // "Don't ask again today": personal entries go straight up
     var pos = $('l214Pos').value.trim();
     if (pos !== myPosition(who)) A.lsSet('wri_214_pos_at', String(Date.now()));   // typed over the check-in's: it wins from now on
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
-    var rec = { recon_id: A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet ? 0 : Date.now() + ASK_MS + 2000,
+    var rec = { recon_id: linked || A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
                           section: urgent ? 'safety' : $('l214Sec').value, default_section: 'operations' } };
     if (urgent) rec.fields.urgent = urgent;
-    save(rec, btn, urgent ? null : unit ? '214 note saved to your log and ' + unitDest() + '.' : quiet ? 'Saved to your 214 log.' : null, function () {
+    if (linked) rec.fields.recon_id = linked.slice(4);
+    var onMap = linked ? ' It’s on the map too.' : '';
+    save(rec, btn, urgent ? null : unit ? '214 note saved to your log and ' + unitDest() + '.' + onMap : quiet ? 'Saved to your 214 log.' + onMap : null, function () {
         if (urgent) {
           trackAlert(rec, urgent); renderAlert();
           A.toast(navigator.onLine ? 'Sending the ' + URG_LABEL[urgent] + ' alert to the Incident Commander and Safety Officer. Still radio them.'
@@ -249,12 +376,14 @@
         '</span><span>' + A.esc(it[0].replace(/\u2026$/, '')) + '</span></button>';
     }).join('');
     $('q214Det').value = '';
+    mHere('q214Submit'); if (!M.touched) mSet(false, '');
     qSync();
     $('q214Home').classList.add('hidden'); $('q214Page').classList.remove('hidden');
     window.scrollTo(0, 0);
   }
   function closeCat() {
     qCat = null; qPick = null;
+    mHere('l214Save'); if (!M.touched) mSet(false, '');
     $('q214Page').classList.add('hidden'); $('q214Home').classList.remove('hidden');
     window.scrollTo(0, 0);
   }
@@ -276,7 +405,7 @@
       : 'Saves to your own log (ICS 214A). Tick to also post it to ' + unitDest() + ' (ICS 214).';
     $('q214DetLbl').textContent = it && needsDetail(it) ? 'Details (needed)' : 'Details (optional)';
     b.disabled = !it;
-    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') + (urg ? ' (my log + Safety)' : u.checked ? ' (my log + unit log)' : '') : 'Pick an activity';
+    b.textContent = it ? 'Log it: ' + it[0].replace(/\u2026$/, '') + (urg ? ' (my log + Safety)' : u.checked ? ' (my log + unit log)' : '') + (M.on && !urg ? ' + map' : '') : 'Pick an activity';
   }
   function submitQuick() {
     if (!qCat || qPick === null) return;
@@ -290,7 +419,8 @@
       var d = $('urgDet').value.trim();   // details are offered on the confirm, never required
       write214(who, d ? label + ' \u2014 ' + d : label, Date.now(), btn, false, true, function () { closeUrg(); closeCat(); }, kind);
     });
-    write214(who, act, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, '');
+    var pt = mPoint(); if (typeof pt === 'string') return A.toast(pt, 5000);
+    write214(who, act, Date.now(), $('q214Submit'), false, $('q214Unit').checked, closeCat, '', pt);
   }
 
   // ---------- Stop work / Injury / Near miss alerts (2026-11-04, batch 7) ----------
@@ -662,14 +792,30 @@
       var b = e.target.closest('.q-pill, .q-urg'); if (!b) return;
       var j = Number(b.dataset.j);
       if (b.classList.contains('q-urg') && openSafetyRecon(qCat.items[j])) return;   // batch 11: Stop work / Injury / Near miss = a recon report
-      qPick = qPick === j ? null : j; qSync();
+      qPick = qPick === j ? null : j;
       var it = qPick !== null ? qCat.items[qPick] : null;
+      // 2026-11-06: an item that is a place on the map ticks "Put this on the map" with its recon type (unless the crew set it)
+      var mt = it && (CONFIG.QUICK_214_MAP || {})[it[0]];
+      if (!M.touched) mSet(!!mt, mt || '');
+      qSync();
       if (it && needsDetail(it) && !$('q214Det').value.trim()) {   // tell them before they tap Log it
         A.toast('“' + it[0].replace(/…$/, '') + '” needs details. Type them in the Details box, then tap Log it.', 5000);
         $('q214Det').scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     };
     $('q214Pills').addEventListener('click', onPick);
+    $('m214On').addEventListener('change', function () { M.touched = true; mSet(this.checked); qSync(); });
+    $('m214Type').addEventListener('change', function () { M.type = this.value; });
+    $('m214Gps').addEventListener('click', mGps);
+    $('m214MapBtn').addEventListener('click', mMap);
+    $('m214Cam').addEventListener('click', function () { $('m214CamIn').click(); });
+    $('m214Gal').addEventListener('click', function () { $('m214GalIn').click(); });
+    $('m214CamIn').addEventListener('change', function () { mPhotos(this); });
+    $('m214GalIn').addEventListener('change', function () { mPhotos(this); });
+    $('m214Photos').addEventListener('click', function (e) {
+      var b = e.target.closest('.rm'); if (!b) return;
+      var p = M.photos.splice(Number(b.dataset.i), 1)[0]; if (p) URL.revokeObjectURL(p.url); mRenderPhotos();
+    });
     $('q214Urgent').addEventListener('click', onPick);
     $('l214AskYes').addEventListener('click', function () { endAsk(true); });
     $('l214AskNo').addEventListener('click', function () { endAsk(false); });
@@ -744,6 +890,7 @@
     showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
   }
   window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); }, safetyFromRecon: safetyFromRecon,
+    logFromRecon: logFromRecon,
     // 2026-11-05 (batch 11): open one HASP to sign (the phone's cached copy, else the Field App's stub); returns it
     openHasp: function (id, stub) {
       var all = [];

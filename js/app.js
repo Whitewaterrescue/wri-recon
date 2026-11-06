@@ -307,7 +307,7 @@
     $('saveBtn').classList.toggle('hidden', n !== TOTAL);
     $('saveBtn').textContent = URGENT[safetyKind()] ? 'Save + send alert' : 'Save point';
     if (n === 1) setTimeout(function () { initMap(); if (map) map.invalidateSize(); }, 50);
-    if (n === TOTAL) renderReview();
+    if (n === TOTAL) { renderReview(); renderR214(); }
     window.scrollTo(0, 0);
   }
   function renderReview() {
@@ -326,9 +326,23 @@
         : 'Logs it to the Safety unit log. Command staff signed up for near miss alerts get a text.') : '');
   }
 
+  // 2026-11-06 (Cody): "Also log it in my 214": one save = the point + a line in the reporter's 214 (forms-ui.js
+  // logFromRecon). Ticked for things done or seen, off for places (ICP, hospital, ramp…), hidden for Stop work /
+  // Injury / Near miss (they already write their Safety 214) and for non-WRI reporters.
+  var r214Touched = false;
+  function r214Shown() {
+    return S.isWri === 'yes' && !SAFETY[S.type] && !safetyKind() && !!(window.WRIForms && WRIForms.logFromRecon);
+  }
+  function renderR214() {
+    var t = typeObj(S.type) || {}, show = r214Shown();
+    $('r214Box').classList.toggle('hidden', !show);
+    if (!r214Touched) $('r214On').checked = show && t.category !== 'Safety' && CONFIG.RECON_PLACE_TYPES.indexOf(S.type) < 0;
+  }
+
   function save() {
     for (var i = 1; i < TOTAL; i++) { var m = check(i); if (m) { toast(m); go(i); return; } }
     var b = $('saveBtn'); busy(b, true, 'Saving…');
+    var log214 = r214Shown() && $('r214On').checked;
     var t = typeObj(S.type) || {};
     var when = S.timeSet && $('obsTime').value ? new Date($('obsTime').value).getTime() : Date.now();
     var rec = {
@@ -351,6 +365,9 @@
       // stop work + injury as the urgent alert (IC + Safety Officer emailed now), a near miss as a plain Safety unit-log entry
       if (safety && window.WRIForms && WRIForms.safetyFromRecon) {
         return WRIForms.safetyFromRecon(rec, safety).catch(function (e) { toast('The point is saved, but the Safety 214 could not be: ' + e.message + '. Radio the Safety Officer.', 10000); });
+      }
+      if (log214) {
+        return WRIForms.logFromRecon(rec, t.label || S.type).catch(function (e) { toast('The point is saved, but its 214 line could not be: ' + e.message, 8000); });
       }
     }).then(function () {
       busy(b, false);
@@ -396,7 +413,7 @@
     S.timeSet = false;
     S.photos.forEach(function (p) { URL.revokeObjectURL(p.url); });
     S.photos = []; S.type = null; S.sub = null; S.lat = null; S.lon = null; S.acc = null;
-    S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null;
+    S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null; r214Touched = false;
     $('desc').value = ''; $('tfName').value = ''; $('tfStatus').value = ''; $('lat').value = ''; $('lon').value = '';
     $('coords').textContent = 'No location yet'; $('gpsBtn').textContent = 'Use My Location'; $('gpsBtn').classList.remove('ok');
     if (marker && map) { map.removeLayer(marker); marker = null; }
@@ -725,6 +742,7 @@
       openSafety(l.type, { inc: l.inc }); if (window.WRIForms) WRIForms.showView('recon');
     });
     $('saveBtn').addEventListener('click', save);
+    $('r214On').addEventListener('change', function () { r214Touched = true; });
     $('obsTime').addEventListener('change', function () { S.timeSet = true; saveDraft(); });
     $('steps').addEventListener('change', saveDraft);
     $('steps').addEventListener('click', function () { setTimeout(saveDraft, 0); });
@@ -798,6 +816,7 @@
 
   window.WRIApp = { S: S, $: $, esc: esc, prefillFromDrone: prefillFromDrone, toast: toast, busy: busy, uuid: uuid, localNow: localNow, lsGet: lsGet, lsSet: lsSet,
     openSafety: openSafety, linkTitle: linkTitle, checkin: checkin, SAFETY: SAFETY, URGENT: URGENT,
+    downscale: downscale, typeObj: typeObj, POOR_GPS_M: POOR_GPS_M,   // the 214's "Put this on the map" (forms-ui.js)
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
     askPin: function (m, inc) { askPin(m, inc); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
   document.addEventListener('DOMContentLoaded', boot);
