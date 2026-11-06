@@ -13,7 +13,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .hdr-btn { background: var(--panel); color: var(--text); border: 1.5px solid var(--line); border-radius: 16px; padding: 6px 12px; font-size: 13px; }
 .progress { height: 3px; background: var(--card); }
 .progress-fill { height: 100%; background: var(--red); width: 20%; transition: width .3s; }
-.banner { padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+/* 2026-11-06 (batch 13 polish): one fixed-height line, so a new message never changes its height (js/app.js refreshStatus) */
+.banner { height: 38px; line-height: 18px; padding: 10px 16px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .banner.amber { background: #4a3a10; color: #ffd27a; }
 .banner.red { background: #4a1416; color: #ff9a9d; }
 .banner.green { background: #123a24; color: #8fe3b0; }
@@ -26,6 +27,13 @@ label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); 
 .field { margin-bottom: 14px; }
 input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 8px; font-size: 16px; background: var(--panel); color: var(--text); -webkit-appearance: none; font-family: inherit; }
 textarea { min-height: 96px; resize: vertical; }
+/* 2026-11-06 (batch 13 polish): neutral until a Save / Next check fails on a field (js/app.js markBad). Focus is a
+   blue edge, never red; the browser's own :invalid / autofill colours are neutralised so "filled" never looks "wrong". */
+input:focus, select:focus, textarea:focus { outline: none; border-color: #8ab4ff; box-shadow: 0 0 0 2px rgba(138,180,255,.28); }
+input:invalid, select:invalid, textarea:invalid, input:-moz-ui-invalid { box-shadow: none; }
+input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px var(--panel) inset; -webkit-text-fill-color: var(--text); border-color: var(--line); }
+input.bad, select.bad, textarea.bad { border-color: #ff6b6f; box-shadow: 0 0 0 2px rgba(255,107,111,.3); }
+.field-err { color: #ff9a9d; font-size: 13px; font-weight: 600; margin-top: 6px; }
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; }
 .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
@@ -80,6 +88,8 @@ textarea { min-height: 96px; resize: vertical; }
 .big { font-size: 46px; }
 .link { background: none; border: none; color: #8ab4ff; font-size: 14px; padding: 4px 0; }
 .right { margin-left: auto; }
+.link.link-danger { color: #ff9a9d; }
+.item .acts .link { min-height: 40px; text-align: left; }
 .item { background: var(--panel); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
 .item .t { font-weight: 600; font-size: 14px; }
 .item .s { margin-top: 2px; }
@@ -207,3 +217,28 @@ body.embed-hasp #haspList, body.embed-hasp #haspBack { display: none !important;
 .m214 .check { margin: 4px 0 8px; font-weight: 600; }
 #m214Box { padding-bottom: 8px; }
 #m214Map { position: absolute; inset: 0; }
+/* 2026-11-06 (batch 13 polish) */
+/* the form tabs end well above anything floating at the bottom (toasts, the Field App's chips) */
+main.view:not(#steps) { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
+/* the request's Save is the biggest thing on the form (persona: the smallest text on the page at 393 px) */
+.btn-big { font-size: 18px; font-weight: 800; min-height: 56px; padding: 16px 12px; border-radius: 12px; margin-top: 14px; }
+.btn-big.rr-confirm { background: #a85a00; }
+/* incident PIN up front: a note with its own button; nothing blocks typing */
+.pin-note { display: flex; align-items: center; gap: 12px; background: #3a3317; border: 1.5px solid #fbbf24; color: #fde68a; border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.4; margin-bottom: 14px; }
+.pin-note span { flex: 1; }
+.pin-note .btn { flex: 0 0 auto; min-height: 44px; padding: 10px 14px; color: #fde68a; border-color: #fbbf24; }
+/* open requests on the incident */
+.rq-sum { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-size: 14px; color: var(--muted); margin: -4px 0 8px; }
+.rq-sum .link { min-height: 44px; padding: 0 4px; font-weight: 700; }
+.rq-late-n { color: #ff9a9d; }
+.rq-all, .rq-dup { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+.rq-dup { border: 2px solid var(--amber); border-radius: 10px; padding: 10px; background: rgba(240,165,0,.10); }
+.rq-head { font-weight: 800; font-size: 14px; color: #ffd27a; }
+.rq { background: var(--panel); border-radius: 8px; padding: 9px 11px; font-size: 13px; line-height: 1.45; border: 1.5px solid var(--line); }
+.rq.rq-late { border-color: #ff6b6f; }
+.rq-t { font-weight: 700; font-size: 14px; }
+.rq-st { text-transform: capitalize; font-size: 12px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-right: 4px; }
+.rq-badge { background: #EC2329; color: #fff; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 1px 8px; margin-right: 6px; }
+.rq-m { color: var(--muted); }
+.rq-late-t { color: #ff9a9d; font-weight: 700; margin-top: 2px; }
+.rq-why { font-size: 12px; color: #ffd27a; margin-top: 2px; }

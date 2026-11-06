@@ -17,10 +17,17 @@
   var BACKOFF_MIN = 20000, BACKOFF_MAX = 10 * 60000, KEEP_SENT_MS = 24 * 3600000;
   var running = false, lastCreated = 0;
 
+  // 2026-11-06 (batch 13 polish): every open page hears every change, whoever made it. The worker's
+  // matchAll() used to skip pages it doesn't control yet (first open), and an upload finished by the
+  // worker or another tab left "waiting to upload" on screen until the next 30 s poll.
+  var chan = null;
+  try { chan = typeof BroadcastChannel === 'function' ? new BroadcastChannel('wri-recon-outbox') : null; } catch (e) {}
+  if (chan && g.document) chan.onmessage = function () { try { g.dispatchEvent(new Event('outbox:changed')); } catch (e) {} };
   function emit() {
     try {
       if (g.document) g.dispatchEvent(new Event('outbox:changed'));
-      else if (g.clients) g.clients.matchAll().then(function (cs) { cs.forEach(function (c) { c.postMessage({ type: 'outbox:changed' }); }); });
+      else if (g.clients) g.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(function (cs) { cs.forEach(function (c) { c.postMessage({ type: 'outbox:changed' }); }); });
+      if (chan) chan.postMessage('changed');
     } catch (e) {}
   }
 
@@ -64,11 +71,27 @@
       return drainOnce();
     },
 
+    /** True while a drain is sending (this page, another tab or the service worker: they share one lock). */
+    uploading: function () {
+      if (running) return Promise.resolve(true);
+      if (!(g.navigator && g.navigator.locks && g.navigator.locks.query)) return Promise.resolve(false);
+      return g.navigator.locks.query().then(function (st) {
+        return (st.held || []).some(function (l) { return l.name === 'wri-recon-drain'; });
+      }).catch(function () { return false; });
+    },
+
     summary: function () {
       return Promise.all([Store.all('records'), Store.all('photos')]).then(function (a) {
-        var recs = a[0] || [], photos = a[1] || [];
-        var s = { queued: 0, needs_pin: 0, failed: 0, sent: 0, photos_waiting: 0, photos_failed: 0 };
-        recs.forEach(function (r) { s[r.status] = (s[r.status] || 0) + 1; });
+        var recs = a[0] || [], photos = a[1] || [], now = Date.now();
+        // queued splits three ways (2026-11-06): due now, waiting out a retry delay, held by the 214's "Add to unit log?"
+        var s = { queued: 0, needs_pin: 0, failed: 0, sent: 0, photos_waiting: 0, photos_failed: 0, due: 0, backoff: 0, held: 0, next_try: 0 };
+        recs.forEach(function (r) {
+          s[r.status] = (s[r.status] || 0) + 1;
+          if (r.status !== 'queued') return;
+          if ((r.hold_until || 0) > now) s.held++;
+          else if ((r.next_try || 0) > now) { s.backoff++; s.next_try = s.next_try ? Math.min(s.next_try, r.next_try) : r.next_try; }
+          else s.due++;
+        });
         var open = {}; recs.forEach(function (r) { if (r.status !== 'sent') open[r.recon_id] = 1; });
         photos.forEach(function (p) {
           if (p.status === 'queued' && open[p.recon_id]) s.photos_waiting++;
@@ -177,6 +200,7 @@
   function drainOnce() {
     if (running) return Promise.resolve();
     running = true;
+    emit();   // the banner says "Uploading…" only while this runs (Outbox.uploading)
     var pins, legacyPin, device, stop = false, badInc = {};
     var pinOf = function (r) { return String(pins[recInc(r)] || legacyPin || ''); };
     return Promise.all([Store.kvGet('pins'), Store.kvGet('pin'), Store.deviceId(), Store.all('records')]).then(function (a) {

@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-06-2">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-06-3">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -131,6 +131,7 @@
   <!-- ICS 214 -->
   <main class="view hidden" data-view="214">
     <div class="step-title">ICS 214 Activity Log</div>
+    <div class="pin-note hidden" id="l214Pin" role="status"><span id="l214PinTxt"></span><button class="btn btn-ghost" id="l214PinBtn" type="button">Enter PIN</button></div>
     <div class="field"><label for="l214Name">Your name</label><select id="l214Name"></select></div>
     <div class="field hidden" id="l214OtherBox"><label for="l214Other">Other name</label><input id="l214Other" placeholder="Your name"></div>
     <!-- shared phone (Jordan walkthrough 2026-11-04): say whose log this is, every time -->
@@ -278,6 +279,11 @@
   <!-- 213-RR -->
   <main class="view hidden" data-view="rr">
     <div class="step-title">Resource request (213-RR)</div>
+    <!-- 2026-11-06 (batch 13 polish): the PIN is asked as the form opens, not after it's all typed (js/forms-ui.js renderPinNote) -->
+    <div class="pin-note hidden" id="rrPin" role="status"><span id="rrPinTxt"></span><button class="btn btn-ghost" id="rrPinBtn" type="button">Enter PIN</button></div>
+    <!-- open requests on the incident: same item / site shown as you type, overdue flagged (js/forms-ui.js loadOpenReq) -->
+    <div class="rq-sum"><span id="rrOpenSum">Checking open requests on this incident&hellip;</span><button class="link hidden" id="rrOpenBtn" type="button">Show</button></div>
+    <div class="rq-all hidden" id="rrOpenAll"></div>
     <div class="field"><label for="rrItem">What do you need?</label><textarea id="rrItem" placeholder="e.g. 200 ft of 18 inch containment boom"></textarea></div>
     <div class="row">
       <div class="field"><label for="rrQty">Qty</label><input id="rrQty" inputmode="numeric" value="1"></div>
@@ -286,13 +292,14 @@
     <div class="field"><label>Priority</label>
       <div class="toggle" id="rrPri"><button type="button" data-val="U">Urgent</button><button type="button" data-val="R" class="active">Routine</button><button type="button" data-val="L">Low</button></div></div>
     <div class="field"><label for="rrWhere">Deliver to</label><input id="rrWhere" placeholder="Site / division / staging"></div>
+    <div class="rq-dup hidden" id="rrDup" role="status" aria-live="polite"></div>
     <div class="field"><label for="rrWhen">Needed by</label><input id="rrWhen" placeholder="e.g. tomorrow 0700"></div>
     <div class="field"><label for="rrNotes">Notes</label><textarea id="rrNotes"></textarea></div>
     <div class="row">
       <div class="field"><label for="rrName">Requested by</label><input id="rrName" placeholder="Your name"></div>
       <div class="field"><label for="rrPos">Position</label><input id="rrPos" placeholder="e.g. TF Leader"></div>
     </div>
-    <button class="btn btn-save wide" id="rrSave" type="button">Save request</button>
+    <button class="btn btn-save wide btn-big" id="rrSave" type="button">Save request</button>
     <div class="sub-title">My requests on this phone</div>
     <div id="rrList"></div>
   </main>
@@ -369,17 +376,17 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-06-2"></script>
-  <script src="js/store.js?v=2026-11-06-2"></script>
-  <script src="js/api.js?v=2026-11-06-2"></script>
-  <script src="js/outbox.js?v=2026-11-06-2"></script>
-  <script src="js/forms.js?v=2026-11-06-2"></script>
-  <script src="js/app.js?v=2026-11-06-2"></script>
-  <script src="js/forms-ui.js?v=2026-11-06-2"></script>
-  <script src="js/dronemeta.js?v=2026-11-06-2"></script>
-  <script src="js/drone-ui.js?v=2026-11-06-2"></script>
-  <script src="js/drill-ui.js?v=2026-11-06-2"></script>
-  <script src="js/hasp-embed.js?v=2026-11-06-2"></script>
+  <script src="js/config.js?v=2026-11-06-3"></script>
+  <script src="js/store.js?v=2026-11-06-3"></script>
+  <script src="js/api.js?v=2026-11-06-3"></script>
+  <script src="js/outbox.js?v=2026-11-06-3"></script>
+  <script src="js/forms.js?v=2026-11-06-3"></script>
+  <script src="js/app.js?v=2026-11-06-3"></script>
+  <script src="js/forms-ui.js?v=2026-11-06-3"></script>
+  <script src="js/dronemeta.js?v=2026-11-06-3"></script>
+  <script src="js/drone-ui.js?v=2026-11-06-3"></script>
+  <script src="js/drill-ui.js?v=2026-11-06-3"></script>
+  <script src="js/hasp-embed.js?v=2026-11-06-3"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

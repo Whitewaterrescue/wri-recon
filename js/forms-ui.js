@@ -111,7 +111,11 @@
       if (!$('l214Act').value.trim()) $('l214Time').value = A.localNow();   // the panel can sit open for hours
       renderAlert();
     }
-    if (view === 'rr') { if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || checkinName(); renderMine('rr', $('rrList')); pollRr(); }
+    if (view === 'rr') {
+      if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || checkinName(); renderMine('rr', $('rrList')); pollRr();
+      renderPinNote($('rrPin')); renderOpenReq(); loadOpenReq();   // 2026-11-06: PIN up front + open requests
+    }
+    if (view === '214') renderPinNote($('l214Pin'));
     if (view === 'hasp') renderHasp();
     if (view === 'vessel') renderVessel();
     if (view === 'drone' && window.DroneUI) window.DroneUI.render();
@@ -133,8 +137,8 @@
   function save214() {
     if (!needIncident()) return;
     var who = pickedName($('l214Name'), $('l214Other')), act = $('l214Act').value.trim();
-    if (!who) return A.toast('Pick your name.');
-    if (!act) return A.toast('Write the activity.');
+    if (!who) { A.markBad($('l214Name').value === '__other__' ? $('l214Other') : $('l214Name'), 'Pick your name.'); return A.toast('Pick your name.'); }
+    if (!act) { A.markBad($('l214Act'), 'Write the activity.'); return A.toast('Write the activity.'); }
     var at = $('l214Time').value ? new Date($('l214Time').value).getTime() : Date.now();
     var pt = mPoint(); if (typeof pt === 'string') return A.toast(pt, 5000);
     write214(who, act, at, $('l214Save'), true, $('l214Unit').checked, null, '', pt);
@@ -718,23 +722,165 @@
     }).catch(function () {});
   }
 
+  // ---------- open requests on the incident (2026-11-06, batch 13 polish) ----------
+  // Persona run: a crew ordered 200 ft of boom while REQ-0053 (300 ft boom to Sha-Ron, a day overdue, still "new")
+  // sat on the board, because the request form showed nothing. The form now reads the incident's open 213-RR
+  // requests (read-only: the same Resource_Requests table of the field view the Incident Board reads, with the
+  // Field App's ArcGIS sign-in on this origin), shows the ones for the same item or delivery site as you type,
+  // flags overdue ones, and asks once before a likely duplicate is saved. The last list is kept per incident for
+  // no-signal use ("as of").
+  var RR_DONE = ['received', 'cancelled', 'canceled', 'rejected', 'closed', 'complete', 'completed', 'demobilized'];
+  var RR_STOP = { ft: 1, feet: 1, foot: 1, inch: 1, inches: 1, the: 1, and: 1, for: 1, with: 1, each: 1, need: 1, needs: 1, more: 1,
+    some: 1, please: 1, pcs: 1, extra: 1, new: 1, qty: 1, site: 1, area: 1, div: 1, division: 1, near: 1, from: 1, at: 1 };
+  var openReq = { inc: '', rows: null, at: 0, fetched: 0, err: '', layer: null, showAll: false }, dupAck = '', dupTimer = 0;
+  function rrWords(t) {
+    return String(t || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3 && !RR_STOP[w] && !/^\d+$/.test(w); })
+      .map(function (w) { return w.length > 4 && /s$/.test(w) && !/ss$/.test(w) ? w.slice(0, -1) : w; });
+  }
+  function shares(a, b) { var m = {}; a.forEach(function (w) { m[w] = 1; }); return b.some(function (w) { return m[w]; }); }
+  /** The Field App's ArcGIS session on this origin (exb_auth), when it has a few minutes left. */
+  function agolToken() {
+    var raw = null;
+    try { raw = localStorage.getItem('exb_auth') || sessionStorage.getItem('exb_auth'); } catch (e) { return ''; }
+    try { var a = JSON.parse(raw || 'null'); if (!a || !a.token) return '';
+      var exp = a.expires != null && a.expires !== '' ? new Date(a.expires).getTime() : NaN;
+      return isFinite(exp) && exp - Date.now() < 120000 ? '' : String(a.token); } catch (e) { return ''; }
+  }
+  function agolPost(url, fields, ms) {
+    var body = new URLSearchParams(); Object.keys(fields).forEach(function (k) { body.set(k, String(fields[k])); });
+    var ac = typeof AbortController === 'function' ? new AbortController() : null, t = ac && setTimeout(function () { ac.abort(); }, ms || 20000);
+    return fetch(url, { method: 'POST', body: body, signal: ac ? ac.signal : undefined }).then(function (r) { return r.json(); })
+      .then(function (j) { if (t) clearTimeout(t); if (j && j.error) throw new Error(j.error.message || 'ArcGIS error'); return j; },
+        function (e) { if (t) clearTimeout(t); throw e; });
+  }
+  function loadOpenReq(force) {
+    if (!S.incident || !CONFIG.INCIDENT_OPS_VIEW) return Promise.resolve();
+    var inc = String(S.incident.incident_id), key = 'rr_open_' + inc;
+    var cached = openReq.inc === inc ? Promise.resolve() : (openReq = { inc: inc, rows: null, at: 0, fetched: 0, err: '', layer: openReq.layer, showAll: false },
+      Store.kvGet(key).then(function (c) { if (c && openReq.inc === inc && !openReq.rows) { openReq.rows = c.rows || []; openReq.at = c.at || 0; renderOpenReq(); } }).catch(function () {}));
+    return cached.then(function () {
+      if (!navigator.onLine || (!force && Date.now() - openReq.fetched < 60000)) return renderOpenReq();
+      var tok = agolToken();
+      if (!tok) { openReq.err = 'signin'; return renderOpenReq(); }
+      openReq.fetched = Date.now();
+      var svc = CONFIG.INCIDENT_OPS_VIEW;
+      var lid = openReq.layer != null ? Promise.resolve(openReq.layer) : agolPost(svc, { f: 'json', token: tok }).then(function (j) {
+        var l = (j.layers || []).concat(j.tables || []).filter(function (x) { return x.name === 'Resource_Requests'; })[0];
+        if (!l) throw new Error('no Resource_Requests table');
+        return (openReq.layer = l.id);
+      });
+      return lid.then(function (id) {
+        return agolPost(svc + '/' + id + '/query', { f: 'json', token: tok, returnGeometry: 'false', resultRecordCount: 500,
+          where: "incident_id = '" + inc.replace(/'/g, "''") + "'",
+          outFields: 'request_id,item,quantity,uom,deliver_to,request_status,requested_at,eta,notes,priority,requested_by', orderByFields: 'requested_at DESC' });
+      }).then(function (j) {
+        if (openReq.inc !== inc) return;
+        openReq.rows = (j.features || []).map(function (f) { return f.attributes || {}; })
+          .filter(function (r) { return RR_DONE.indexOf(String(r.request_status || '').toLowerCase()) < 0; });
+        openReq.at = Date.now(); openReq.err = '';
+        Store.kvSet(key, { rows: openReq.rows, at: openReq.at }).catch(function () {});
+        renderOpenReq();
+      }, function (e) { if (openReq.inc === inc) { openReq.err = 'fail'; renderOpenReq(); } });
+    });
+  }
+  function reqNeededBy(r) { var m = /(?:^|\s)Needed by ([^.]{1,40})\./.exec(String(r.notes || '')); return m ? m[1].trim() : ''; }
+  function reqOverdue(r) { var e = Number(r.eta); return e > 1e12 && e < Date.now(); }
+  function shortTime(ms) { return new Date(ms).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  function reqLine(r, why) {
+    var st = String(r.request_status || 'new').replace(/_/g, ' '), late = reqOverdue(r);
+    var age = Number(r.requested_at) > 1e12 ? Math.round((Date.now() - Number(r.requested_at)) / 3600e3) : 0;
+    var bits = [r.request_id, r.deliver_to ? 'to ' + r.deliver_to : '', reqNeededBy(r) ? 'needed by ' + reqNeededBy(r) : '',
+      r.eta && !late ? 'ETA ' + shortTime(Number(r.eta)) : '', r.requested_by ? 'by ' + r.requested_by : ''].filter(Boolean);
+    return '<div class="rq' + (late ? ' rq-late' : '') + '"><div class="rq-t">' + (late ? '<span class="rq-badge">OVERDUE</span>' : '') +
+      '<span class="rq-st">' + A.esc(st) + '</span> ' + A.esc((r.quantity ? r.quantity + ' ' + (r.uom || '') + ' ' : '') + (r.item || 'Request')) + '</div>' +
+      '<div class="rq-m">' + A.esc(bits.join(' · ')) + '</div>' +
+      (late ? '<div class="rq-late-t">ETA was ' + A.esc(shortTime(Number(r.eta))) + (st === 'new' && age >= 6 ? ', still new after ' + age + ' h' : '') + '. Ask Logistics before ordering again.</div>' : '') +
+      (why ? '<div class="rq-why">' + A.esc(why) + '</div>' : '') + '</div>';
+  }
+  /** Open requests like the one being typed: same item words or same delivery site. */
+  function dupMatches() {
+    var iw = rrWords($('rrItem').value), sw = rrWords($('rrWhere').value);
+    if (!openReq.rows || (!iw.length && !sw.length)) return [];
+    return openReq.rows.map(function (r) {
+      var item = iw.length && shares(iw, rrWords(r.item)), site = sw.length && shares(sw, rrWords(r.deliver_to));
+      return item || site ? { r: r, why: item && site ? 'Same item, same delivery site' : item ? 'Same item' : 'Same delivery site', score: (item ? 2 : 0) + (site ? 1 : 0) } : null;
+    }).filter(Boolean).sort(function (a, b) { return b.score - a.score || (reqOverdue(b.r) - reqOverdue(a.r)); });
+  }
+  function renderOpenReq() {
+    if (view !== 'rr') return;
+    var sum = $('rrOpenSum'), all = $('rrOpenAll'), dup = $('rrDup');
+    var rows = openReq.rows, asOf = openReq.at && Date.now() - openReq.at > 10 * 60000 ? ' (as of ' + hhmm(openReq.at) + ')' : '';
+    if (!rows) {
+      sum.textContent = openReq.err === 'signin' ? 'Open requests show here when the Field App is signed in to ArcGIS.'
+        : openReq.err === 'fail' ? 'Couldn’t load the open requests. Check the Incident Board before ordering.'
+        : navigator.onLine ? 'Checking open requests on this incident…' : 'No signal: open requests show when you’re back in coverage.';
+      $('rrOpenBtn').classList.add('hidden'); all.classList.add('hidden'); dup.innerHTML = ''; dup.classList.add('hidden'); return;
+    }
+    var late = rows.filter(reqOverdue).length;
+    sum.innerHTML = rows.length ? A.esc(rows.length + ' open request' + (rows.length === 1 ? '' : 's') + ' on this incident') +
+      (late ? ' · <b class="rq-late-n">' + late + ' overdue</b>' : '') + A.esc(asOf) : A.esc('No open requests on this incident' + asOf + '.');
+    $('rrOpenBtn').classList.toggle('hidden', !rows.length);
+    $('rrOpenBtn').textContent = openReq.showAll ? 'Hide' : 'Show';
+    all.classList.toggle('hidden', !openReq.showAll || !rows.length);
+    if (openReq.showAll) all.innerHTML = rows.slice().sort(function (a, b) { return reqOverdue(b) - reqOverdue(a); }).map(function (r) { return reqLine(r); }).join('');
+    var m = dupMatches();
+    dup.classList.toggle('hidden', !m.length);
+    dup.innerHTML = m.length ? '<div class="rq-head">Already open on this incident: check before you order again</div>' +
+      m.slice(0, 4).map(function (x) { return reqLine(x.r, x.why); }).join('') + (m.length > 4 ? '<div class="hint">and ' + (m.length - 4) + ' more (tap Show above)</div>' : '') : '';
+    if (dupAck && dupAck !== dupKey(m)) rrSaveLabel();   // the form changed: ask again for the new match
+  }
+  function dupKey(m) { return m.map(function (x) { return x.r.request_id; }).join(','); }
+
+  // ---------- incident PIN up front (2026-11-06, batch 13 polish) ----------
+  // Persona run: the Gateway PIN was asked only after the whole request was typed. A form tab now says so as it
+  // opens when this phone has no PIN for the incident (a note + Enter PIN, nothing blocks typing); Save still asks.
+  function renderPinNote(el) {
+    if (!el) return;
+    if (!S.incident) { el.classList.add('hidden'); return; }
+    var inc = S.incident.incident_id;
+    Outbox.pinFor(inc).then(function (pin) {
+      if (!S.incident || S.incident.incident_id !== inc) return;
+      el.classList.toggle('hidden', !!pin);
+      if (!pin) $(el.id + 'Txt').textContent = 'No incident PIN on this phone for ' + (S.incident.project_key || 'this incident') +
+        ' yet. You can fill this in now; it uploads once the PIN is entered.';
+    });
+  }
+  function pinAfterSave() {
+    if (!S.incident) return;
+    var inc = S.incident;
+    Outbox.pinFor(inc.incident_id).then(function (pin) { if (!pin) A.askPin('Enter the incident PIN so this can upload. It stays saved on the phone until then.', inc); });
+  }
+
   // ---------- 213-RR ----------
   function saveRr() {
     if (!needIncident()) return;
     var item = $('rrItem').value.trim(), who = $('rrName').value.trim();
-    if (!item) return A.toast('Describe what you need.');
-    if (!who) return A.toast('Enter your name.');
+    if (!item) { A.markBad($('rrItem'), 'Describe what you need.'); $('rrItem').focus(); return A.toast('Describe what you need.'); }
+    if (!who) { A.markBad($('rrName'), 'Enter your name.'); $('rrName').focus(); return A.toast('Enter your name.'); }
+    // a likely duplicate of an open request: show it and ask once (a second tap sends)
+    var m = dupMatches(), k = dupKey(m);
+    if (m.length && dupAck !== k) {
+      dupAck = k; renderOpenReq();
+      $('rrDup').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      var b = $('rrSave'); b.textContent = 'Send anyway (not a duplicate)'; b.classList.add('rr-confirm');
+      clearTimeout(dupTimer); dupTimer = setTimeout(rrSaveLabel, 15000);
+      return A.toast(m[0].r.request_id + ' is already open for this' + (reqOverdue(m[0].r) ? ' and OVERDUE' : '') + '. If you still need more, tap Send anyway.', 7000);
+    }
     var pr = (document.querySelector('#rrPri .active') || {}).dataset;
     A.lsSet('wri_recon_name', who); A.lsSet('wri_rr_pos', $('rrPos').value.trim());
+    clearTimeout(dupTimer);
     save({ recon_id: A.uuid(), kind: 'rr', incident: S.incident, fields: {
         item: item, qty: $('rrQty').value.trim() || '1', uom: $('rrUom').value.trim() || 'EA', priority: (pr && pr.val) || 'R',
         delivery: $('rrWhere').value.trim(), arrival: $('rrWhen').value.trim(), notes: $('rrNotes').value.trim(),
         requester: who, position: $('rrPos').value.trim(), at: Date.now() } },
       $('rrSave'), 'Request saved. Logistics sees it on the Incident Board within about 5 minutes of uploading.', function () {
         ['rrItem', 'rrWhere', 'rrWhen', 'rrNotes'].forEach(function (id) { $(id).value = ''; }); $('rrQty').value = '1'; $('rrUom').value = 'EA';
+        dupAck = ''; rrSaveLabel(); renderOpenReq();
         renderMine('rr', $('rrList'));
+        pinAfterSave();   // the submit-time PIN check stays
       });
   }
+  function rrSaveLabel() { var b = $('rrSave'); if (b.disabled) return; dupAck = ''; b.textContent = 'Save request'; b.classList.remove('rr-confirm'); }
 
   // ---------- HASP ----------
   function haspsForIncident() {
@@ -981,6 +1127,12 @@
     $('l214Save').addEventListener('click', save214);
     $('rrPri').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('rrPri', b.dataset.val); });
     $('rrSave').addEventListener('click', saveRr);
+    var dupLater = function () { clearTimeout(dupLater._t); dupLater._t = setTimeout(renderOpenReq, 350); };
+    $('rrItem').addEventListener('input', dupLater); $('rrWhere').addEventListener('input', dupLater);
+    $('rrOpenBtn').addEventListener('click', function () { openReq.showAll = !openReq.showAll; renderOpenReq(); });
+    ['rrPinBtn', 'l214PinBtn'].forEach(function (id) { $(id).addEventListener('click', function () { A.askPin('Enter the incident PIN.'); }); });
+    window.addEventListener('online', function () { if (view === 'rr') loadOpenReq(true); });
+    setInterval(function () { if (view === 'rr' && document.visibilityState === 'visible') loadOpenReq(); }, 60000);
     $('haspList').addEventListener('click', function (e) { var b = e.target.closest('.hasp-item'); if (b) openHaspDetail(haspsForIncident()[Number(b.dataset.i)]); });
     $('haspBack').addEventListener('click', function () { openHasp = null; renderHasp(); });
     $('haspName').addEventListener('change', function () { $('haspOtherBox').classList.toggle('hidden', this.value !== '__other__'); renderHaspWho(); });
@@ -1008,7 +1160,10 @@
     $('disOk').addEventListener('click', disembark);
     $('vReturn').addEventListener('click', returnTrip);
     window.addEventListener('incident:changed', function () { if (!EMBED_HASP) openHasp = null; render(); });
-    window.addEventListener('outbox:changed', function () { if (view === '214') { renderMine('214', $('l214List')); renderAlert(); } if (view === 'rr') renderMine('rr', $('rrList')); });
+    window.addEventListener('outbox:changed', function () {
+      if (view === '214') { renderMine('214', $('l214List')); renderAlert(); renderPinNote($('l214Pin')); }
+      if (view === 'rr') { renderMine('rr', $('rrList')); renderPinNote($('rrPin')); }   // a PIN entered (Outbox.setPin) hides the note
+    });
 
     Store.kvGet('vessel_trip').then(function (t) { trip = t || null; render(); });
     [].forEach.call($('tabs').children, function (b) { b.classList.toggle('hidden', !tabOn(b.dataset.view)); });
