@@ -46,6 +46,17 @@ var CONFIG = {
       ['Fuel / supplies run', '⛽', 'idle'], ['Supervisor notified…', '📞', 'info'], ['Agency / landowner on scene…', '🏛️', 'info'],
       ['Radio / comms check', '📻', 'info']] }
   ],
+  // 214 + recon in one entry (2026-11-06, Cody): quick items that are also a place on the map. Picking one ticks
+  // "Put this on the map" with this recon type; the crew can untick it or pick another type.
+  QUICK_214_MAP: {
+    'Boom deployed…': 'current_boom_site', 'Boom recovered': 'recovery_complete', 'Skimmer deployed': 'response_action',
+    'Sorbents deployed': 'response_action', 'Product recovered…': 'response_action', 'Oil observed…': 'oil_spotted',
+    'Wildlife observed…': 'injured_wildlife', 'Decon set up': 'decon', 'Work zone set up': 'staging_area',
+    'Sample taken…': 'other_observation', 'Drone flight launched': 'drone_flight',
+    'Site assessment started': 'scat', 'Site assessment complete': 'scat'
+  },
+  // recon types that are a place rather than something done or seen: the recon form's "Also log it in my 214" starts off
+  RECON_PLACE_TYPES: ['icp', 'landing_zone', 'boat_ramp', 'hospital', 'aid_station', 'tactical_team'],
   CATEGORIES: ['Response Actions', 'Observations', 'Safety'],
   AFFILIATIONS: ['Responsible Party', 'Agency', 'Contractor', 'Private Citizen', 'Other'],
   // satellite tiles for the online pin map (public, no key)

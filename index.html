@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-05-4">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-06-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -108,6 +108,8 @@
     <section class="step" data-step="5">
       <div class="step-title">Review</div>
       <div class="review" id="review"></div>
+      <!-- 2026-11-06 (Cody): one save = the point + a line in my 214 (forms-ui.js logFromRecon) -->
+      <label class="check hidden" id="r214Box"><input type="checkbox" id="r214On"> <span>Also log it in my 214 (and the unit log)</span></label>
       <div class="hint">Saving puts the point on this phone first. It uploads by itself whenever there's signal.</div>
     </section>
   </main>
@@ -153,6 +155,25 @@
       <div class="field"><label for="l214Act">Activity</label><textarea id="l214Act" placeholder="What happened / what you did"></textarea></div>
       <label class="check"><input type="checkbox" id="l214Unit"> Also post to the unit log</label>
       <div class="hint">Saves to your own log (ICS 214A). Tick to also post it to your section&rsquo;s unit log (ICS 214).</div>
+      <!-- 2026-11-06 (Cody): one entry = the 214 + a recon point. Moved under whichever form is showing (forms-ui.js mHere). -->
+      <div class="m214" id="m214">
+        <label class="check"><input type="checkbox" id="m214On"> <span>&#128205; Put this on the map (recon point)</span></label>
+        <div id="m214Box" class="hidden">
+          <div class="field"><label for="m214Type">What it is</label><select id="m214Type"></select></div>
+          <button class="btn btn-gps" id="m214Gps" type="button">Use My Location</button>
+          <div class="coords" id="m214Coords">No location yet</div>
+          <button class="link" id="m214MapBtn" type="button">Mark the spot on the map instead</button>
+          <div class="map-wrap hidden" id="m214MapWrap"><div id="m214Map"></div></div>
+          <div class="row photo-btns">
+            <button class="btn btn-ghost" type="button" id="m214Cam">&#128247; Take Photo</button>
+            <button class="btn btn-ghost" type="button" id="m214Gal">&#128444;&#65039; Add Photos</button>
+          </div>
+          <input type="file" id="m214CamIn" accept="image/*" capture="environment" hidden>
+          <input type="file" id="m214GalIn" multiple hidden>
+          <div class="photo-grid" id="m214Photos"></div>
+          <div class="hint">The note goes in your 214 and on the map as a recon point, with the photos. One save does both.</div>
+        </div>
+      </div>
       <button class="btn btn-save wide" id="l214Save" type="button">Save note</button>
     </div>
     <div id="q214Page" class="hidden">
@@ -344,17 +365,17 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-05-4"></script>
-  <script src="js/store.js?v=2026-11-05-4"></script>
-  <script src="js/api.js?v=2026-11-05-4"></script>
-  <script src="js/outbox.js?v=2026-11-05-4"></script>
-  <script src="js/forms.js?v=2026-11-05-4"></script>
-  <script src="js/app.js?v=2026-11-05-4"></script>
-  <script src="js/forms-ui.js?v=2026-11-05-4"></script>
-  <script src="js/dronemeta.js?v=2026-11-05-4"></script>
-  <script src="js/drone-ui.js?v=2026-11-05-4"></script>
-  <script src="js/drill-ui.js?v=2026-11-05-4"></script>
-  <script src="js/hasp-embed.js?v=2026-11-05-4"></script>
+  <script src="js/config.js?v=2026-11-06-1"></script>
+  <script src="js/store.js?v=2026-11-06-1"></script>
+  <script src="js/api.js?v=2026-11-06-1"></script>
+  <script src="js/outbox.js?v=2026-11-06-1"></script>
+  <script src="js/forms.js?v=2026-11-06-1"></script>
+  <script src="js/app.js?v=2026-11-06-1"></script>
+  <script src="js/forms-ui.js?v=2026-11-06-1"></script>
+  <script src="js/dronemeta.js?v=2026-11-06-1"></script>
+  <script src="js/drone-ui.js?v=2026-11-06-1"></script>
+  <script src="js/drill-ui.js?v=2026-11-06-1"></script>
+  <script src="js/hasp-embed.js?v=2026-11-06-1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
