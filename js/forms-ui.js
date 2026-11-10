@@ -11,6 +11,10 @@
   var view = 'recon', trip = null, openHasp = null, sig = { drawing: false, has: false };
   // ?embed=214: the Field App's floating 214 button opens this page with only the 214 tab
   var EMBED = /[?&]embed=214(&|#|$)/.test(location.search);
+  // &from=gateway: an outside responder on WRI Respond (G2 2026-11-10). Their own log only:
+  // no unit-log picker, no "Add to unit log?" (it sent contractors to Operations). Stop work /
+  // injury / near miss still go to the Safety unit log.
+  var OUTSIDE = EMBED && /[?&]from=gateway(&|#|$)/.test(location.search);
   // 2026-11-05 (batch 11): ?embed=hasp&hasp=<id>: the Field App's HASP page signs one plan here (js/hasp-embed.js)
   var EMBED_HASP = /[?&]embed=hasp(&|#|$)/.test(location.search);
   var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
@@ -292,7 +296,7 @@
     if (pos !== myPosition(who)) A.lsSet('wri_214_pos_at', String(Date.now()));   // typed over the check-in's: it wins from now on
     A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
-    var rec = { recon_id: linked || A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet ? 0 : Date.now() + ASK_MS + 2000,
+    var rec = { recon_id: linked || A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet || OUTSIDE ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
                           section: urgent ? 'safety' : $('l214Sec').value, default_section: 'operations' } };
     if (urgent) rec.fields.urgent = urgent;
@@ -304,7 +308,7 @@
           A.toast(navigator.onLine ? 'Sending the ' + URG_LABEL[urgent] + ' alert to the Incident Commander and Safety Officer. Still radio them.'
             : 'No signal: the ' + URG_LABEL[urgent] + ' alert goes out when signal returns. Radio your supervisor and the Safety Officer now.', 12000);
         }
-        if (!unit && !quiet) askUnit(rec.recon_id, act, who);
+        if (!unit && !quiet && !OUTSIDE) askUnit(rec.recon_id, act, who);
         if (clearAct) $('l214Act').value = '';
         $('l214Time').value = A.localNow(); renderMine('214', $('l214List'));
         $('l214Unit').checked = false; $('q214Unit').checked = false; $('l214Save').textContent = 'Save note';   // every entry starts personal
@@ -1054,6 +1058,14 @@
     A = window.WRIApp; $ = A.$; S = A.S;
     if (EMBED) {
       document.body.classList.add('embed'); CONFIG.TABS = ['214'];
+      if (OUTSIDE) {
+        document.body.classList.add('embed-outside');
+        $('l214Sec').value = '';
+        var hide = function (el) { if (el) el.style.display = 'none'; };
+        hide($('l214Sec').closest('.field'));
+        var lu = $('l214Unit').closest('label'); hide(lu); hide(lu && lu.nextElementSibling);
+        hide($('q214Unit').closest('label')); hide($('q214UnitHint'));
+      }
       var nm = /[?&]name=([^&#]+)/.exec(location.search);   // the Field App's checked-in name
       // the checked-in person is the one holding the phone: their name wins over the last user's (Jordan 2026-11-04)
       if (nm) A.lsSet('wri_recon_name', decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim());
