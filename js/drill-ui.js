@@ -173,7 +173,11 @@
   };
 
   function showTip() {
-    var lines = PROMPTS[$('deComp').value] || [];
+    var key = $('deComp').value, lines = PROMPTS[key] || [];
+    if (!lines.length && key) {   // Cal OSPR / CO PUC / Minnesota: the admin's prompt for the item
+      var it = plan().items.filter(function (x) { return x.key === key; })[0];
+      if (it && it.prompt) lines = String(it.prompt).split(/;\s*|\.\s+/).filter(function (s) { return s.trim(); });
+    }
     $('deTip').classList.toggle('hidden', !lines.length);
     $('deTip').innerHTML = lines.length ? '<b>Cover:</b><br>• ' + lines.map(A.esc).join('<br>• ') +
       '<br><button type="button" class="link" id="deTipUse">Start the note from these prompts</button>' : '';
@@ -190,17 +194,40 @@
   // What the admin's Drill setup picked for the incident (Cody 2026-10-31): only the picked NPREP components (+ the
   // DPX / FRP objectives) and, on an Ecology drill, only the picked Ecology credits are listed; "Show all" lists
   // every one. Nothing picked = everything, as before.
+  // 2026-11-11: drill_form (nprep | ecy | ospr | copuc | mn) + drill_items [{key, label, group, prompt}] from the admin
   function plan() {
     var id = S.incident && S.incident.incident_id;
     var r = ((S.cfg && S.cfg.incidents) || []).filter(function (x) { return x.incident_id === id; })[0] || {};
-    return { cmp: r.drill_components || [], ecology: !!r.drill_ecology, ecy: r.drill_ecy || [] };
+    return { cmp: r.drill_components || [], ecology: !!r.drill_ecology, ecy: r.drill_ecy || [],
+             form: r.drill_form || '', items: Array.isArray(r.drill_items) ? r.drill_items : [] };
   }
+  // the drill's requirement list for setups saved before drill_items (NPREP / Ecology picks only)
+  function legacyItems(r) {
+    var cmp = r.drill_components || [], ecy = r.drill_ecy || [];
+    if (r.drill_ecology) return ECY.filter(function (c) { return !ecy.length || ecy.indexOf(c[0]) >= 0; })
+      .map(function (c) { return { key: 'ecy_' + c[0], label: c[0] + ' ' + c[1], group: 'Washington Ecology credits', prompt: '' }; });
+    if (!cmp.length) return [];   // can't tell an un-picked NPREP drill from no drill: re-save the Drill setup
+    return COMPONENTS.filter(function (c) { return cmp.indexOf(c[0]) >= 0; })
+      .map(function (c) { return { key: c[0], label: c[1], group: 'NPREP core components', prompt: '' }; });
+  }
+  function promptFor(key) { return (PROMPTS[key] || []).join('; '); }
   function fillComponents() {
     var p = plan(), cur = $('deComp').value, showAll = $('deAll').checked;
-    $('deAllBox').classList.toggle('hidden', !p.cmp.length && !p.ecy.length && !p.ecology);
     var opt = function (key, label, picked) {
       return '<option value="' + key + '"' + (key === cur ? ' selected' : '') + '>' + A.esc(label) + (picked ? ' (planned)' : '') + '</option>';
     };
+    // Cal OSPR / CO PUC / Minnesota drills: the admin's list (picked items; none picked = all)
+    if (p.form === 'ospr' || p.form === 'copuc' || p.form === 'mn') {
+      $('deAllBox').classList.add('hidden');
+      var groups = {}, order = [];
+      p.items.forEach(function (it) { var g = it.group || 'Requirements'; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(it); });
+      $('deComp').innerHTML = '<option value="">Select…</option>' + order.map(function (g) {
+        return '<optgroup label="' + A.esc(g) + '">' + groups[g].map(function (it) { return opt(it.key, it.label, false); }).join('') + '</optgroup>';
+      }).join('');
+      showTip();
+      return;
+    }
+    $('deAllBox').classList.toggle('hidden', !p.cmp.length && !p.ecy.length && !p.ecology);
     var allC = !p.cmp.length || showAll;
     var html = '<option value="">Select…</option>';
     // one form per drill (Cody 2026-10-31): an Ecology drill lists the Ecology credits, NPREP only under Show all
@@ -234,6 +261,6 @@
     window.addEventListener('incident:changed', render);
     showMode('timeline');
   }
-  window.DrillUI = { render: render };
+  window.DrillUI = { render: render, legacyItems: legacyItems, promptFor: promptFor };
   document.addEventListener('DOMContentLoaded', boot);
 })();

@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-10-1">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-11-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -146,6 +146,8 @@
     </select><div class="hint" id="l214Dest"></div></div>
     <!-- page 1: four category buttons; page 2: that category's activities + Log it -->
     <div id="q214Home">
+      <!-- 2026-11-11 (Cody): on a drill incident, one tap per drill requirement met (js/drill214.js) -->
+      <div id="d214Card" class="hidden"></div>
       <div class="q-cats" id="q214Cats"></div>
       <!-- 2026-11-04 (batch 7, Sam run 2): today's entries right under the buttons, with their upload status -->
       <div class="sub-title" id="l214MineTitle">My entries today</div>
@@ -186,6 +188,12 @@
       <label class="check q-unit"><input type="checkbox" id="q214Unit"> Also post to the unit log</label>
       <div class="hint" id="q214UnitHint">Saves to your own log (ICS 214A). Tick to also post it to your section&rsquo;s unit log (ICS 214).</div>
       <button class="btn btn-save wide q-submit" id="q214Submit" type="button" disabled>Pick an activity</button>
+    </div>
+    <div id="d214Page" class="hidden">
+      <button class="q-back" id="d214Back" type="button">&lsaquo; Categories</button>
+      <div class="q-head qc-red" id="d214Head">Drill requirements</div>
+      <div class="hint">Tap a requirement when it is met. It goes on the drill timeline at that time, credits it in the drill package, and adds a line to your 214.</div>
+      <div id="d214List"></div>
     </div>
   </main>
 
@@ -365,6 +373,22 @@
     <button class="btn btn-ghost ask-off" id="l214AskOff" type="button">Just mine, don&rsquo;t ask again today</button></div>
 
   <!-- 2026-11-04 (batch 7): Stop work / Injury / Near miss alert the IC and Safety Officer: confirm first (a thumb scroll can land on them) -->
+  <!-- drill requirement met: confirm (js/drill214.js) -->
+  <div class="overlay hidden" id="d214Overlay">
+    <div class="box">
+      <div class="urg-title" id="d214SheetTitle"></div>
+      <div class="hint" id="d214Was"></div>
+      <div id="d214MetBox">
+        <div class="field"><label for="d214Time">Met at</label><div class="row"><input type="datetime-local" id="d214Time"><button type="button" class="btn btn-ghost" id="d214Now" style="flex:0 0 auto;width:auto;padding:0 18px">Now</button></div></div>
+        <div class="field"><label for="d214Note">Note (optional)</label><textarea id="d214Note" placeholder="What showed it was met: who, what, where"></textarea></div>
+        <div class="hint hidden" id="d214Tip"></div>
+      </div>
+      <button class="btn btn-save wide" id="d214Met" type="button">Met</button>
+      <button class="btn btn-ghost wide hidden" id="d214Undo" type="button">Undo: not met</button>
+      <button class="btn btn-ghost wide" id="d214Cancel" type="button">Cancel</button>
+    </div>
+  </div>
+
   <div class="overlay hidden" id="urgOverlay">
     <div class="box urg-box">
       <div class="urg-title" id="urgTitle">Send STOP WORK alert?</div>
@@ -376,17 +400,18 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-10-1"></script>
-  <script src="js/store.js?v=2026-11-10-1"></script>
-  <script src="js/api.js?v=2026-11-10-1"></script>
-  <script src="js/outbox.js?v=2026-11-10-1"></script>
-  <script src="js/forms.js?v=2026-11-10-1"></script>
-  <script src="js/app.js?v=2026-11-10-1"></script>
-  <script src="js/forms-ui.js?v=2026-11-10-1"></script>
-  <script src="js/dronemeta.js?v=2026-11-10-1"></script>
-  <script src="js/drone-ui.js?v=2026-11-10-1"></script>
-  <script src="js/drill-ui.js?v=2026-11-10-1"></script>
-  <script src="js/hasp-embed.js?v=2026-11-10-1"></script>
+  <script src="js/config.js?v=2026-11-11-1"></script>
+  <script src="js/store.js?v=2026-11-11-1"></script>
+  <script src="js/api.js?v=2026-11-11-1"></script>
+  <script src="js/outbox.js?v=2026-11-11-1"></script>
+  <script src="js/forms.js?v=2026-11-11-1"></script>
+  <script src="js/app.js?v=2026-11-11-1"></script>
+  <script src="js/forms-ui.js?v=2026-11-11-1"></script>
+  <script src="js/dronemeta.js?v=2026-11-11-1"></script>
+  <script src="js/drone-ui.js?v=2026-11-11-1"></script>
+  <script src="js/drill-ui.js?v=2026-11-11-1"></script>
+  <script src="js/drill214.js?v=2026-11-11-1"></script>
+  <script src="js/hasp-embed.js?v=2026-11-11-1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
