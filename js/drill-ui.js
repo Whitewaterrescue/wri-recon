@@ -199,7 +199,8 @@
     var id = S.incident && S.incident.incident_id;
     var r = ((S.cfg && S.cfg.incidents) || []).filter(function (x) { return x.incident_id === id; })[0] || {};
     return { cmp: r.drill_components || [], ecology: !!r.drill_ecology, ecy: r.drill_ecy || [],
-             form: r.drill_form || '', items: Array.isArray(r.drill_items) ? r.drill_items : [] };
+             form: r.drill_form || '', nprep: r.drill_nprep != null ? !!r.drill_nprep : (r.drill_form || 'nprep') === 'nprep',
+             items: Array.isArray(r.drill_items) ? r.drill_items : [] };
   }
   // the drill's requirement list for setups saved before drill_items (NPREP / Ecology picks only)
   function legacyItems(r) {
@@ -216,11 +217,15 @@
     var opt = function (key, label, picked) {
       return '<option value="' + key + '"' + (key === cur ? ' selected' : '') + '>' + A.esc(label) + (picked ? ' (planned)' : '') + '</option>';
     };
-    // Cal OSPR / CO PUC / Minnesota drills: the admin's list (picked items; none picked = all)
-    if (p.form === 'ospr' || p.form === 'copuc' || p.form === 'mn') {
-      $('deAllBox').classList.add('hidden');
+    // 2026-11-11: the admin's list (NPREP and / or one state form; picked items, none picked = all), + the DPX / FRP
+    // objectives when the NPREP form is on. "Show all" adds every NPREP component and Ecology credit.
+    var others = p.items.filter(function (it) { return !/^(ecy_)/.test(it.key) && !COMPONENTS.some(function (c) { return c[0] === it.key; }); });
+    if (p.items.length && !showAll) {
+      $('deAllBox').classList.remove('hidden');
       var groups = {}, order = [];
-      p.items.forEach(function (it) { var g = it.group || 'Requirements'; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(it); });
+      var list = p.items.concat(p.nprep ? COMPONENTS.filter(function (c) { return /^(dpx|frp)_/.test(c[0]); })
+        .map(function (c) { return { key: c[0], label: c[1], group: 'DPX / FRP objectives' }; }) : []);
+      list.forEach(function (it) { var g = it.group || 'Requirements'; if (!groups[g]) { groups[g] = []; order.push(g); } groups[g].push(it); });
       $('deComp').innerHTML = '<option value="">Select…</option>' + order.map(function (g) {
         return '<optgroup label="' + A.esc(g) + '">' + groups[g].map(function (it) { return opt(it.key, it.label, false); }).join('') + '</optgroup>';
       }).join('');
@@ -239,6 +244,7 @@
       html += '<optgroup label="Washington Ecology credits">' + ECY.filter(function (c) { return allE || p.ecy.indexOf(c[0]) >= 0; })
         .map(function (c) { return opt('ecy_' + c[0], 'ECY ' + c[0] + ' ' + c[1], allE && p.ecy.indexOf(c[0]) >= 0); }).join('') + '</optgroup>';
     }
+    if (showAll && others.length) html += '<optgroup label="State requirements">' + others.map(function (it) { return opt(it.key, it.label, false); }).join('') + '</optgroup>';
     $('deComp').innerHTML = html;
     showTip();
   }

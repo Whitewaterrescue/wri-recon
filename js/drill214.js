@@ -32,7 +32,11 @@
     return legacy || [];
   }
   var FORM_NAMES = { nprep: 'NPREP', ecy: 'WA Ecology', ospr: 'Cal OSPR', copuc: 'CO PUC', mn: 'Minnesota' };
-  function formName() { var r = row() || {}; return FORM_NAMES[r.drill_form] || (r.drill_ecology ? 'WA Ecology' : 'NPREP'); }
+  function formName() {   // "NPREP + Minnesota" (2026-11-11: NPREP and / or one state form)
+    var r = row() || {}, st = r.drill_form && r.drill_form !== 'nprep' ? r.drill_form : (r.drill_ecology ? 'ecy' : '');
+    var np = r.drill_nprep != null ? !!r.drill_nprep : !st;
+    return [np ? 'NPREP' : '', st ? FORM_NAMES[st] : ''].filter(Boolean).join(' + ') || 'NPREP';
+  }
 
   function who() {
     var sel = $('l214Name');
