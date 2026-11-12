@@ -30,9 +30,12 @@
     try { var c = JSON.parse(A.lsGet('wri_checkin_state') || 'null'); return c && c.name ? String(c.name).trim() : ''; } catch (e) { return ''; }
   }
   var notMe = false;   // "Not you?" tapped: the name stays empty until they pick one
+  // R1 2026-11-12: the Gateway's checked-in name is for its 214 panel only. Field Forms is on the same
+  // site as the Field App, so saving it as wri_recon_name made the next Field App user "PW-TEST Morgan".
+  var GW_NAME = '';
   function fillNames(sel, otherBox, otherInput, withOther) {
     // 2026-11-05 (batch 11): the checked-in name first (the person holding the phone), then the last name used here
-    var keep = sel.value || (notMe ? '' : checkinName()) || A.lsGet('wri_recon_name') || '';
+    var keep = sel.value || (OUTSIDE ? (notMe ? '' : GW_NAME) : ((notMe ? '' : checkinName()) || A.lsGet('wri_recon_name'))) || '';
     var names = staff(), lc = function (n) { return n.toLowerCase(); };
     // a name that isn't on the staff list (the check-in name, one typed under Other…) is its own choice, not "Other…"
     if (keep && keep !== '__other__' && withOther) {
@@ -294,7 +297,8 @@
     var quiet = !unit && noAskToday(who);   // "Don't ask again today": personal entries go straight up
     var pos = $('l214Pos').value.trim();
     if (pos !== myPosition(who)) A.lsSet('wri_214_pos_at', String(Date.now()));   // typed over the check-in's: it wins from now on
-    A.lsSet('wri_recon_name', who); A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
+    if (!OUTSIDE) A.lsSet('wri_recon_name', who);   // a Gateway person's name is never kept on the phone
+    A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
     var rec = { recon_id: linked || A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet || OUTSIDE ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
@@ -1068,7 +1072,9 @@
       }
       var nm = /[?&]name=([^&#]+)/.exec(location.search);   // the Field App's checked-in name
       // the checked-in person is the one holding the phone: their name wins over the last user's (Jordan 2026-11-04)
-      if (nm) A.lsSet('wri_recon_name', decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim());
+      var nmVal = nm ? decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim() : '';
+      if (OUTSIDE) GW_NAME = nmVal;   // this panel only (R1 2026-11-12)
+      else if (nmVal) A.lsSet('wri_recon_name', nmVal);
       window.addEventListener('message', function (e) {   // panel reopened: refresh the time and the list
         if (e.origin === location.origin && e.data && e.data.type === 'wri-214' && e.data.action === 'open') render();
       });
