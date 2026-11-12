@@ -37,9 +37,12 @@
   // R1 2026-11-12: the Gateway's checked-in name is for its 214 panel only. Field Forms is on the same
   // site as the Field App, so saving it as wri_recon_name made the next Field App user "PW-TEST Morgan".
   var GW_NAME = '';
+  // D2/D4 2026-11-12: the name the opener passed (&name=: a dashboard's signed-in person, or the Field App's
+  // checked-in one) wins in this panel. A stale check-in on a desk PC made the Logistics panel log as "PW-TEST Morgan".
+  var URL_NAME = '';
   function fillNames(sel, otherBox, otherInput, withOther) {
     // 2026-11-05 (batch 11): the checked-in name first (the person holding the phone), then the last name used here
-    var keep = sel.value || (OUTSIDE ? (notMe ? '' : GW_NAME) : ((notMe ? '' : checkinName()) || A.lsGet('wri_recon_name'))) || '';
+    var keep = sel.value || (OUTSIDE ? (notMe ? '' : GW_NAME) : ((notMe ? '' : (URL_NAME || checkinName())) || A.lsGet('wri_recon_name'))) || '';
     var names = staff(), lc = function (n) { return n.toLowerCase(); };
     // a name that isn't on the staff list (the check-in name, one typed under Other…) is its own choice, not "Other…"
     if (keep && keep !== '__other__' && withOther) {
@@ -1084,7 +1087,7 @@
       // the checked-in person is the one holding the phone: their name wins over the last user's (Jordan 2026-11-04)
       var nmVal = nm ? decodeURIComponent(nm[1].replace(/\+/g, ' ')).trim() : '';
       if (OUTSIDE) GW_NAME = nmVal;   // this panel only (R1 2026-11-12)
-      else if (nmVal) A.lsSet('wri_recon_name', nmVal);
+      else if (nmVal) { URL_NAME = nmVal; A.lsSet('wri_recon_name', nmVal); }
       window.addEventListener('message', function (e) {   // panel reopened: refresh the time and the list
         if (e.origin === location.origin && e.data && e.data.type === 'wri-214' && e.data.action === 'open') render();
       });
