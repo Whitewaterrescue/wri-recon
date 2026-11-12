@@ -49,6 +49,8 @@
     <!-- STEP 1 -->
     <section class="step" data-step="1">
       <div class="step-title">When &amp; Where</div>
+      <!-- 2026-11-12 (Cody): signed in through the Field App = the Reporter step is skipped; Change brings it back -->
+      <div class="who-strip hidden" id="whoStrip"><span>Reporting as <b id="whoStripName"></b></span><button type="button" class="link" id="whoChange">Change</button></div>
       <div class="field"><label for="obsTime">Date/Time</label><input type="datetime-local" id="obsTime"></div>
       <label>Location</label>
       <button class="btn btn-gps" id="gpsBtn" type="button">Use My Location</button>
@@ -84,15 +86,18 @@
       <div class="note hidden" id="obsMissing"></div>
       <div class="obs-grid" id="obsGrid"></div>
       <div class="hidden" id="subBox"><label>Sub-type</label><div class="chips" id="subChips"></div></div>
+      <!-- 2026-11-12 (Cody): task force fields only for Tactical/Operational Team, right under the pick -->
+      <div class="hidden tf-box" id="tfBox">
+        <div class="field"><label for="tfName">Task Force / Strike Team (optional)</label><input id="tfName" placeholder="e.g. TF Bravo"></div>
+        <div class="field"><label for="tfStatus">TF status (optional)</label>
+          <select id="tfStatus"><option value="">—</option><option value="current">Current</option><option value="planned">Planned</option></select></div>
+      </div>
     </section>
 
     <!-- STEP 4 -->
     <section class="step" data-step="4">
       <div class="step-title">Details &amp; Photos</div>
       <div class="field"><label for="desc">Description</label><textarea id="desc" placeholder="Describe the observation..."></textarea></div>
-      <div class="field"><label for="tfName">Task Force / Strike Team (optional)</label><input id="tfName" placeholder="e.g. TF Bravo"></div>
-      <div class="field"><label for="tfStatus">TF status (optional)</label>
-        <select id="tfStatus"><option value="">—</option><option value="current">Current</option><option value="planned">Planned</option></select></div>
       <div class="row photo-btns">
         <button class="btn btn-ghost" type="button" id="camBtn">📷 Take Photo</button>
         <button class="btn btn-ghost" type="button" id="galBtn">🖼️ Add Photos</button>

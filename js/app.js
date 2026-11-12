@@ -57,6 +57,44 @@
   // 2026-11-05 (batch 11): the Field App check-in (same origin) names the person holding the phone
   function checkin() { try { var c = JSON.parse(lsGet('wri_checkin_state') || 'null'); return c && c.name ? c : null; } catch (e) { return null; } }
   function whoAmI() { var c = checkin(); return (c && String(c.name).trim()) || lsGet('wri_recon_name') || ''; }
+  // 2026-11-12 (Cody): "we're logged into the Field App, skip the Reporter window". The person is known when the
+  // Field App check-in or the Field App's ArcGIS sign-in (exb_auth -> the account's full name) names someone on
+  // the staff list. The remembered last name alone (wri_recon_name) never skips: on a shared phone it may not be you.
+  var agolName = '';
+  try { agolName = sessionStorage.getItem('wri_agol_fullname') || ''; } catch (e) {}
+  function normName(s) { return String(s || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' '); }
+  function staffHit(name) {
+    var n = normName(name); if (!n) return '';
+    return ((S.cfg && S.cfg.staff) || []).filter(function (x) { return normName(x) === n; })[0] || '';
+  }
+  function autoWho() {
+    if (S.whoChanged || S.isWri !== 'yes') return '';
+    var c = checkin(), hit = staffHit(c && c.name) || staffHit(agolName);
+    if (!hit) return '';
+    var sel = $('wriName');
+    if (!sel.value || (sel.value === '__other__' && !$('wriOther').value.trim())) { sel.value = hit; $('wriOtherBox').classList.add('hidden'); }
+    return sel.value === hit ? hit : '';
+  }
+  function steps() { return autoWho() ? [1, 3, 4, 5] : [1, 2, 3, 4, 5]; }
+  function renderWho() {
+    var w = S.step === 1 ? autoWho() : '';
+    $('whoStrip').classList.toggle('hidden', !w);
+    $('whoStripName').textContent = w;
+  }
+  function loadAgolName() {
+    if (agolName || !navigator.onLine || !CONFIG.PORTAL_URL) return;
+    var raw = null; try { raw = localStorage.getItem('exb_auth') || sessionStorage.getItem('exb_auth'); } catch (e) { return; }
+    var a = null; try { a = JSON.parse(raw || 'null'); } catch (e) {}
+    if (!a || !a.token) return;
+    var exp = a.expires != null && a.expires !== '' ? new Date(a.expires).getTime() : NaN;
+    if (isFinite(exp) && exp < Date.now()) return;
+    fetch(CONFIG.PORTAL_URL + '/sharing/rest/community/self', { method: 'POST', body: new URLSearchParams({ f: 'json', token: String(a.token) }) })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.fullName) return;
+        agolName = String(j.fullName); try { sessionStorage.setItem('wri_agol_fullname', agolName); } catch (e) {}
+        go(S.step, true);
+      }).catch(function () {});
+  }
 
   // ---------- config (cached on the phone) ----------
   function loadConfig() {
@@ -269,6 +307,10 @@
     }).join('') || '<div class="hint">Lists not loaded yet — open once with signal.</div>';
     var t = typeObj(S.type), subs = t && t.has_subtype ? ((S.cfg && S.cfg.subtypes) || []).filter(function (s) { return s.parent_code === t.code; }) : [];
     $('subBox').classList.toggle('hidden', !subs.length);
+    // 2026-11-12 (Cody): task force / strike team only for Tactical/Operational Team; any other pick clears it
+    var tf = !!t && (t.code === 'tactical_team' || /task\s*force|strike\s*team/i.test(t.label || ''));
+    $('tfBox').classList.toggle('hidden', !tf);
+    if (!tf && S.cfg) { $('tfName').value = ''; $('tfStatus').value = ''; }
     $('subChips').innerHTML = subs.map(function (s) {
       return '<button type="button" class="chip' + (s.code === S.sub ? ' sel' : '') + '" data-code="' + esc(s.code) + '">' + esc(s.label) + '</button>';
     }).join('');
@@ -320,12 +362,15 @@
   function flagStep(step) {
     if (step === 2 && !reporterName()) markBad(S.isWri === 'yes' ? ($('wriName').value === '__other__' ? $('wriOther') : $('wriName')) : $('extName'), 'Enter your name.');
   }
-  function go(n) {
+  function go(n, keepScroll) {
     S.step = n;
     if (!S.timeSet) $('obsTime').value = localNow();   // untouched: keep it "now"
     saveDraft();
     [].forEach.call(document.querySelectorAll('.step'), function (s) { s.classList.toggle('active', Number(s.dataset.step) === n); });
-    $('progressFill').style.width = (n / TOTAL * 100) + '%';
+    var list = steps(), pos = list.indexOf(n) + 1 || n;
+    $('progressFill').style.width = (pos / list.length * 100) + '%';
+    renderWho();
+    if (keepScroll) return;   // a late identity refresh: don't move the page
     $('backBtn').classList.toggle('hidden', n === 1);
     $('nextBtn').classList.toggle('hidden', n === TOTAL);
     $('saveBtn').classList.toggle('hidden', n !== TOTAL);
@@ -549,10 +594,12 @@
     var m = check(S.step); if (m) { toast(m); flagStep(S.step); return; }
     // a safety report skips what's already filled: reporter + type set = straight to the details (type missing = step 3)
     if (S.link && S.step === 1 && !check(2)) { S.link.skipped = true; S.link.via3 = !!check(3); go(S.link.via3 ? 3 : 4); return; }
+    if (S.step === 1 && autoWho() && !check(2)) { go(3); return; }   // signed in through the Field App: no Reporter step
     go(S.step + 1);
   }
   function back() {
     if (S.link && S.link.skipped && (S.step === 3 || (S.step === 4 && !S.link.via3))) { go(1); return; }
+    if (S.step === 3 && autoWho()) { go(1); return; }
     go(Math.max(1, S.step - 1));
   }
 
@@ -820,6 +867,7 @@
       var p = S.photos.splice(Number(b.dataset.i), 1)[0]; if (p) URL.revokeObjectURL(p.url); renderPhotos();
     });
     $('nextBtn').addEventListener('click', next);
+    $('whoChange').addEventListener('click', function () { S.whoChanged = true; go(2); });
     $('backBtn').addEventListener('click', back);
     $('safetyLinkCancel').addEventListener('click', function () {   // not a safety report after all: a normal point, nothing typed is lost
       setLink(null); buildTypes(); saveDraft(); toast('Now a normal recon point. Pick the type on step 3.');
@@ -881,6 +929,8 @@
       S.booted = true;
       if (link) saveDraft();
       else if (!/[?&]embed=(214|hasp)/.test(location.search)) restoreDraft();   // 2026-11-05 (batch 11): no recon draft in the 214 / HASP frames
+      go(S.step, true);   // the staff list is in: show "Reporting as" when the Field App names you
+      loadAgolName();
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
       setTimeout(wakeKick, 800);

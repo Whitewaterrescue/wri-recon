@@ -258,3 +258,8 @@ main.view:not(#steps) { padding-bottom: calc(140px + env(safe-area-inset-bottom)
 .d214-item.met .d214-box { border-color: var(--green); background: var(--green); color: #fff; }
 .d214-l { display: flex; flex-direction: column; gap: 4px; }
 .d214-s { font-size: 13px; font-weight: 500; color: var(--green); }
+/* 2026-11-12: 'Reporting as' line on step 1 (Field App sign-in skips the Reporter step); task force fields under the type grid */
+.who-strip { display: flex; align-items: center; gap: 8px; justify-content: space-between; background: #2a2c2c; border: 1px solid #55595a; border-radius: 8px; padding: 6px 12px; margin-bottom: 12px; font-size: 14px; color: #b8bcbc; }
+.who-strip b { color: #f0f0f0; }
+.who-strip.hidden, .tf-box.hidden { display: none; }
+.tf-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid #55595a; }
