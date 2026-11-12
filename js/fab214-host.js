@@ -12,8 +12,11 @@
  * The host page may set, before or after this loads:
  *   window.WRI_214_HOST = {
  *     incident: 'key or id' | function () { return 'key or id'; },   // else Field Forms uses the device's pick
- *     section:  'safety' | 'logistics' | 'operations' | …             // unit log preselected in the panel
+ *     section:  'safety' | 'logistics' | 'operations' | …,            // unit log preselected in the panel
+ *     user:     'name' | function () { return 'name'; }                  // the page's signed-in person (D2/D4 2026-11-12)
  *   };
+ * A host's signed-in name wins over this device's saved name: on a shared desk PC the panel said
+ * "Logging as PW-TEST Morgan" (the last Field Forms user) while the dashboard was signed in as someone else.
  *
  * Self-contained: its styles are inlined and it needs nothing from the host page.
  * Ported from wri-respond/js/ics214.js; keep the service-worker refresh and the
@@ -90,8 +93,13 @@
   function checkedInName() {
     try { var c = JSON.parse(lsGet('wri_checkin_state') || 'null'); return c && c.name ? String(c.name).trim() : ''; } catch (e) { return ''; }
   }
+  function hostUser() {
+    var c = window.WRI_214_HOST || {}, v = '';
+    try { v = typeof c.user === 'function' ? c.user() : c.user; } catch (e) {}
+    return String(v == null ? '' : v).trim();
+  }
   function wantUrl() {
-    var inc = hostIncident(), name = checkedInName();
+    var inc = hostIncident(), name = hostUser() || checkedInName();
     var sec = String((window.WRI_214_HOST || {}).section || '').toLowerCase();
     return FORMS + '?embed=214' + (inc ? '&incident=' + encodeURIComponent(inc) : '') +
       (name ? '&name=' + encodeURIComponent(name) : '') +
