@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-12-3">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-12-4">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -49,6 +49,8 @@
     <!-- STEP 1 -->
     <section class="step" data-step="1">
       <div class="step-title">When &amp; Where</div>
+      <!-- 2026-11-12 (Cody): signed in through the Field App = the Reporter step is skipped; Change brings it back -->
+      <div class="who-strip hidden" id="whoStrip"><span>Reporting as <b id="whoStripName"></b></span><button type="button" class="link" id="whoChange">Change</button></div>
       <div class="field"><label for="obsTime">Date/Time</label><input type="datetime-local" id="obsTime"></div>
       <label>Location</label>
       <button class="btn btn-gps" id="gpsBtn" type="button">Use My Location</button>
@@ -84,15 +86,18 @@
       <div class="note hidden" id="obsMissing"></div>
       <div class="obs-grid" id="obsGrid"></div>
       <div class="hidden" id="subBox"><label>Sub-type</label><div class="chips" id="subChips"></div></div>
+      <!-- 2026-11-12 (Cody): task force fields only for Tactical/Operational Team, right under the pick -->
+      <div class="hidden tf-box" id="tfBox">
+        <div class="field"><label for="tfName">Task Force / Strike Team (optional)</label><input id="tfName" placeholder="e.g. TF Bravo"></div>
+        <div class="field"><label for="tfStatus">TF status (optional)</label>
+          <select id="tfStatus"><option value="">—</option><option value="current">Current</option><option value="planned">Planned</option></select></div>
+      </div>
     </section>
 
     <!-- STEP 4 -->
     <section class="step" data-step="4">
       <div class="step-title">Details &amp; Photos</div>
       <div class="field"><label for="desc">Description</label><textarea id="desc" placeholder="Describe the observation..."></textarea></div>
-      <div class="field"><label for="tfName">Task Force / Strike Team (optional)</label><input id="tfName" placeholder="e.g. TF Bravo"></div>
-      <div class="field"><label for="tfStatus">TF status (optional)</label>
-        <select id="tfStatus"><option value="">—</option><option value="current">Current</option><option value="planned">Planned</option></select></div>
       <div class="row photo-btns">
         <button class="btn btn-ghost" type="button" id="camBtn">📷 Take Photo</button>
         <button class="btn btn-ghost" type="button" id="galBtn">🖼️ Add Photos</button>
@@ -400,18 +405,18 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-12-3"></script>
-  <script src="js/store.js?v=2026-11-12-3"></script>
-  <script src="js/api.js?v=2026-11-12-3"></script>
-  <script src="js/outbox.js?v=2026-11-12-3"></script>
-  <script src="js/forms.js?v=2026-11-12-3"></script>
-  <script src="js/app.js?v=2026-11-12-3"></script>
-  <script src="js/forms-ui.js?v=2026-11-12-3"></script>
-  <script src="js/dronemeta.js?v=2026-11-12-3"></script>
-  <script src="js/drone-ui.js?v=2026-11-12-3"></script>
-  <script src="js/drill-ui.js?v=2026-11-12-3"></script>
-  <script src="js/drill214.js?v=2026-11-12-3"></script>
-  <script src="js/hasp-embed.js?v=2026-11-12-3"></script>
+  <script src="js/config.js?v=2026-11-12-4"></script>
+  <script src="js/store.js?v=2026-11-12-4"></script>
+  <script src="js/api.js?v=2026-11-12-4"></script>
+  <script src="js/outbox.js?v=2026-11-12-4"></script>
+  <script src="js/forms.js?v=2026-11-12-4"></script>
+  <script src="js/app.js?v=2026-11-12-4"></script>
+  <script src="js/forms-ui.js?v=2026-11-12-4"></script>
+  <script src="js/dronemeta.js?v=2026-11-12-4"></script>
+  <script src="js/drone-ui.js?v=2026-11-12-4"></script>
+  <script src="js/drill-ui.js?v=2026-11-12-4"></script>
+  <script src="js/drill214.js?v=2026-11-12-4"></script>
+  <script src="js/hasp-embed.js?v=2026-11-12-4"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
