@@ -15,6 +15,10 @@
   // no unit-log picker, no "Add to unit log?" (it sent contractors to Operations). Stop work /
   // injury / near miss still go to the Safety unit log.
   var OUTSIDE = EMBED && /[?&]from=gateway(&|#|$)/.test(location.search);
+  // &section=safety|logistics|…: a dashboard's 214 button (js/fab214-host.js) preselects its own unit log.
+  // Used for this panel only: it is not kept as the person's choice unless they change it themselves.
+  var SEC_HOST = EMBED && !OUTSIDE ? ((/[?&]section=(command|operations|planning|logistics|finance|safety)(&|#|$)/.exec(location.search) || [])[1] || '') : '';
+  var secFromHost = false;
   // 2026-11-05 (batch 11): ?embed=hasp&hasp=<id>: the Field App's HASP page signs one plan here (js/hasp-embed.js)
   var EMBED_HASP = /[?&]embed=hasp(&|#|$)/.test(location.search);
   var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
@@ -304,7 +308,7 @@
     var pos = $('l214Pos').value.trim();
     if (pos !== myPosition(who)) A.lsSet('wri_214_pos_at', String(Date.now()));   // typed over the check-in's: it wins from now on
     if (!OUTSIDE) A.lsSet('wri_recon_name', who);   // a Gateway person's name is never kept on the phone
-    A.lsSet('wri_214_pos', pos); A.lsSet('wri_214_section', $('l214Sec').value);
+    A.lsSet('wri_214_pos', pos); if (!secFromHost) A.lsSet('wri_214_section', $('l214Sec').value);
     // a personal entry waits on the phone while "Add to unit log?" is up (ASK_MS), then uploads
     var rec = { recon_id: linked || A.uuid(), kind: '214', incident: S.incident, hold_until: unit || quiet || OUTSIDE ? 0 : Date.now() + ASK_MS + 2000,
                 fields: { person: who, position: $('l214Pos').value.trim(), activity: act, at: at, also_unit: !!unit,
@@ -1138,12 +1142,12 @@
     $('q214Unit').addEventListener('change', qSync);   // the button says where the entry goes
     $('l214Unit').addEventListener('change', function () { $('l214Save').textContent = this.checked ? 'Save note to my log + unit log' : 'Save note'; });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
-    $('l214Time').value = A.localNow(); $('l214Sec').value = A.lsGet('wri_214_section') || ''; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
+    $('l214Time').value = A.localNow(); $('l214Sec').value = SEC_HOST || A.lsGet('wri_214_section') || ''; secFromHost = !!SEC_HOST; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('l214Pos').value = myPosition(checkinName());   // batch 11: the check-in position
     renderDest();
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); renderWho(); renderMine('214', $('l214List')); });
     $('l214Other').addEventListener('change', function () { renderWho(); renderMine('214', $('l214List')); });
-    $('l214Sec').addEventListener('change', function () { A.lsSet('wri_214_section', this.value); renderDest(); qSync(); });
+    $('l214Sec').addEventListener('change', function () { secFromHost = false; A.lsSet('wri_214_section', this.value); renderDest(); qSync(); });
     $('l214NotMe').addEventListener('click', function () {   // hand-off on a shared phone: pick the right name first
       notMe = true; A.lsSet('wri_recon_name', ''); $('l214Name').value = ''; $('l214Other').value = ''; $('l214OtherBox').classList.add('hidden');
       renderWho(); renderMine('214', $('l214List')); $('l214Name').focus();
