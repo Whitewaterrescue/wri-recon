@@ -255,12 +255,18 @@
 
   // The recon form's "Also log it in my 214" (2026-11-06): the point's line in the reporter's 214 and unit log,
   // id map-<recon_id> like an entry made here. Safety types never come here (safetyFromRecon writes theirs).
+  // R1 2026-11-12: a 214 line takes the point's time only when it is plausible (the last 7 days, not ahead of
+  // now). A drone photo with an unset clock dated one 2025-12-13 on an incident logged 2026-11-11.
+  function lineTime(t) {
+    var n = Date.now();
+    return t && t > n - 7 * 864e5 && t < n + 36e5 ? t : n;
+  }
   function logFromRecon(rec, label) {
     var f = rec.fields || {}, who = String(f.reporter_name || '').trim(), desc = String(f.description || '').trim();
     if (!who) return Promise.resolve(null);
     var r = { recon_id: 'map-' + rec.recon_id, kind: '214', incident: rec.incident, hold_until: 0,
               fields: { person: who, position: myPosition(who), activity: label + (desc ? ': ' + desc : '') + ' (on map)',
-                        at: f.observation_epoch || Date.now(), also_unit: true, section: A.lsGet('wri_214_section') || '',
+                        at: lineTime(f.observation_epoch), also_unit: true, section: A.lsGet('wri_214_section') || '',
                         default_section: 'operations', recon_id: rec.recon_id } };
     return Outbox.enqueue(r, []).then(function () { if (view === '214') renderMine('214', $('l214List')); return r; });
   }
@@ -666,7 +672,7 @@
       : 'Near miss' + (desc ? ': ' + desc : '') + ' (recon point)';
     var who = String(f.reporter_name || '').trim();
     var r = { recon_id: A.uuid(), kind: '214', incident: rec.incident, hold_until: 0,
-              fields: { person: who, position: myPosition(who), activity: act, at: f.observation_epoch || Date.now(), also_unit: true,
+              fields: { person: who, position: myPosition(who), activity: act, at: lineTime(f.observation_epoch), also_unit: true,
                         section: 'safety', default_section: 'operations', recon_id: rec.recon_id } };
     if (urgent) r.fields.urgent = urgent;
     return Outbox.enqueue(r, []).then(function () {
