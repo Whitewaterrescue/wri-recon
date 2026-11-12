@@ -899,7 +899,11 @@
     if (marker && map) { map.removeLayer(marker); marker = null; }
     if (o.lat != null) { setLoc(o.lat, o.lon, null, 'drone'); $('coords').textContent += '  (from the drone photos: tap the map to move it)'; }
     else { $('coords').textContent = 'No location in these photos: tap the map, use GPS or type it'; $('lat').value = ''; $('lon').value = ''; }
-    if (o.when) { var d = new Date(o.when); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('obsTime').value = d.toISOString().slice(0, 16); S.timeSet = true; }
+    // R1 2026-11-12: a drone clock that was never set put a 214 line in 2025. The photos' time is used only
+    // when it is plausible (the last 7 days, not ahead of now); otherwise the point keeps "now" and says so.
+    var okWhen = o.when && o.when > Date.now() - 7 * 864e5 && o.when < Date.now() + 36e5;
+    if (okWhen) { var d = new Date(o.when); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('obsTime').value = d.toISOString().slice(0, 16); S.timeSet = true; }
+    else if (o.when) toast('The drone photos say they were taken ' + new Date(o.when).toLocaleString() + '. That looks wrong (drone clock?), so the time is now. Change Date/Time if needed.', 8000);
     renderPhotos(); go(1);
   }
 
