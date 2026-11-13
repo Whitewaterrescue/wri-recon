@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <!-- ?v= stamps = APP_VERSION in sw.js; bump both together -->
-  <link rel="stylesheet" href="css/app.css?v=2026-11-12-4">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-13-1">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
@@ -28,6 +28,8 @@
     <button type="button" data-view="rr">Request</button>
     <button type="button" data-view="drill">Drill Eval</button>
   </nav>
+  <!-- 2026-11-13: ?view=drone hands off to the Recon form ("start a new point"); this brings the person back -->
+  <button type="button" class="lock-back hidden" id="lockBack">&larr; Back</button>
   <div class="incbar"><label for="incidentSel">Incident</label><select id="incidentSel"></select></div>
   <div class="hint incbar-hint" id="incidentHint"></div>
   <div class="progress" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
@@ -297,6 +299,12 @@
     <!-- open requests on the incident: same item / site shown as you type, overdue flagged (js/forms-ui.js loadOpenReq) -->
     <div class="rq-sum"><span id="rrOpenSum">Checking open requests on this incident&hellip;</span><button class="link hidden" id="rrOpenBtn" type="button">Show</button></div>
     <div class="rq-all hidden" id="rrOpenAll"></div>
+    <!-- 2026-11-13 (Cody): search the WRRL to fill the request (js/wrrl.js keeps the whole list on the phone, works offline) -->
+    <div class="field"><label for="rrFind">Find in the WRRL</label>
+      <input id="rrFind" type="search" autocomplete="off" placeholder="e.g. skimmer, 18 in boom, CRC">
+      <div class="hint" id="rrFindHint"></div>
+      <div class="wrrl-res" id="rrFindRes"></div></div>
+    <div class="wrrl-pick hidden" id="rrPick" role="status"><span id="rrPickTxt"></span><button class="link" id="rrPickX" type="button">Clear</button></div>
     <div class="field"><label for="rrItem">What do you need?</label><textarea id="rrItem" placeholder="e.g. 200 ft of 18 inch containment boom"></textarea></div>
     <div class="row">
       <div class="field"><label for="rrQty">Qty</label><input id="rrQty" inputmode="numeric" value="1"></div>
@@ -308,6 +316,18 @@
     <div class="rq-dup hidden" id="rrDup" role="status" aria-live="polite"></div>
     <div class="field"><label for="rrWhen">Needed by</label><input id="rrWhen" placeholder="e.g. tomorrow 0700"></div>
     <div class="field"><label for="rrNotes">Notes</label><textarea id="rrNotes"></textarea></div>
+    <!-- 2026-11-13: the rest of the Ops "Resource Request V2" fields, so this page can replace it everywhere -->
+    <details class="rr-more" id="rrMore">
+      <summary>More details (optional)</summary>
+      <div class="field"><label>Tactical?</label>
+        <div class="toggle" id="rrTac"><button type="button" data-val="No" class="active">No</button><button type="button" data-val="Yes">Yes</button></div></div>
+      <div class="row">
+        <div class="field"><label for="rrBranch">Branch</label><input id="rrBranch" placeholder="Branch"></div>
+        <div class="field"><label for="rrGroup">Division / Group</label><input id="rrGroup" placeholder="Division or group"></div>
+      </div>
+      <div class="field"><label for="rrSubs">Acceptable substitutes</label><input id="rrSubs" placeholder="Other items that would work"></div>
+      <div class="field"><label for="rrSupplier">Suggested supplier</label><input id="rrSupplier" placeholder="Vendor or supplier"></div>
+    </details>
     <div class="row">
       <div class="field"><label for="rrName">Requested by</label><input id="rrName" placeholder="Your name"></div>
       <div class="field"><label for="rrPos">Position</label><input id="rrPos" placeholder="e.g. TF Leader"></div>
@@ -405,18 +425,19 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="js/config.js?v=2026-11-12-4"></script>
-  <script src="js/store.js?v=2026-11-12-4"></script>
-  <script src="js/api.js?v=2026-11-12-4"></script>
-  <script src="js/outbox.js?v=2026-11-12-4"></script>
-  <script src="js/forms.js?v=2026-11-12-4"></script>
-  <script src="js/app.js?v=2026-11-12-4"></script>
-  <script src="js/forms-ui.js?v=2026-11-12-4"></script>
-  <script src="js/dronemeta.js?v=2026-11-12-4"></script>
-  <script src="js/drone-ui.js?v=2026-11-12-4"></script>
-  <script src="js/drill-ui.js?v=2026-11-12-4"></script>
-  <script src="js/drill214.js?v=2026-11-12-4"></script>
-  <script src="js/hasp-embed.js?v=2026-11-12-4"></script>
+  <script src="js/config.js?v=2026-11-13-1"></script>
+  <script src="js/store.js?v=2026-11-13-1"></script>
+  <script src="js/api.js?v=2026-11-13-1"></script>
+  <script src="js/outbox.js?v=2026-11-13-1"></script>
+  <script src="js/forms.js?v=2026-11-13-1"></script>
+  <script src="js/app.js?v=2026-11-13-1"></script>
+  <script src="js/wrrl.js?v=2026-11-13-1"></script>
+  <script src="js/forms-ui.js?v=2026-11-13-1"></script>
+  <script src="js/dronemeta.js?v=2026-11-13-1"></script>
+  <script src="js/drone-ui.js?v=2026-11-13-1"></script>
+  <script src="js/drill-ui.js?v=2026-11-13-1"></script>
+  <script src="js/drill214.js?v=2026-11-13-1"></script>
+  <script src="js/hasp-embed.js?v=2026-11-13-1"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
