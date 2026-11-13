@@ -15,7 +15,10 @@
     photos: [],   // [{blob, name, url, meta?}]
     maxPhotos: CONFIG.MAX_PHOTOS, droneGroup: null   // a point started from the Drone tab holds up to DRONE_PER_POINT
   };
-  var map = null, marker = null;
+  var map = null, marker = null;   // Leaflet (the imagery map: no signal / no ArcGIS sign-in)
+  // 2026-11-13: mapApi = whichever map shows: the incident response map (js/respmap.js) or the Leaflet imagery
+  var mapApi = null, mapStarting = false;
+  function hasAgol() { try { return !!(localStorage.getItem('exb_auth') || sessionStorage.getItem('exb_auth')); } catch (e) { return false; } }
 
   // ---------- small helpers ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -224,12 +227,7 @@
     S.lat = Number(lat); S.lon = Number(lon); S.acc = acc == null ? null : Math.round(acc);
     $('coords').textContent = S.lat.toFixed(6) + ', ' + S.lon.toFixed(6) + (S.acc != null ? '  ± ' + S.acc + ' m' : '');
     if (from !== 'typed') { $('lat').value = S.lat.toFixed(6); $('lon').value = S.lon.toFixed(6); }
-    if (map) {
-      var ll = [S.lat, S.lon];
-      if (!marker) marker = L.circleMarker(ll, { radius: 9, color: '#fff', weight: 2, fillColor: '#EC2329', fillOpacity: 1 }).addTo(map);
-      else marker.setLatLng(ll);
-      if (from !== 'map') map.setView(ll, Math.max(map.getZoom(), 15));
-    }
+    if (mapApi) mapApi.setPin(S.lat, S.lon, from !== 'map');
   }
   var POOR_GPS_M = 50;
   function gps() {
@@ -251,6 +249,28 @@
     if (isFinite(la) && isFinite(lo) && Math.abs(la) <= 90 && Math.abs(lo) <= 180) setLoc(la, lo, null, 'typed');
   }
   function initMap() {
+    if (!navigator.onLine) return;
+    initLeaflet();          // the imagery map shows at once
+    upgradeMap();           // the incident response map takes over when it is ready (signal + ArcGIS sign-in)
+  }
+  // 2026-11-13: the response map (js/respmap.js) loads in its own layer over the Leaflet map and replaces it only once it
+  // has drawn; on any failure (no sign-in, slow signal, 25 s) the imagery map simply stays.
+  var respTried = '';
+  function upgradeMap() {
+    if (!window.RespMap || mapStarting || !S.incident || !hasAgol()) return;
+    if (mapApi && mapApi.kind === 'response') return;
+    var inc = String(S.incident.incident_id);
+    if (respTried === inc) return;
+    respTried = inc; mapStarting = true;
+    RespMap.start({ container: 'respMap', incident: S.incident, onTap: function (la, lo) { setLoc(la, lo, null, 'map'); } }).then(function (api) {
+      mapStarting = false;
+      if (!api) return;
+      $('respMap').classList.remove('resp-pending'); $('map').classList.add('hidden'); $('mapMsg').classList.add('hidden');
+      mapApi = api;
+      if (S.lat != null) setLoc(S.lat, S.lon, S.acc, 'restore');
+    });
+  }
+  function initLeaflet() {
     if (map || typeof L === 'undefined' || !navigator.onLine) return;
     try {
       var inc = S.cfg && S.cfg.incidents && S.cfg.incidents.filter(function (r) { return S.incident && r.incident_id === S.incident.incident_id; })[0];
@@ -258,6 +278,17 @@
       map = L.map('map', { zoomControl: true, attributionControl: true }).setView(c, 13);
       L.tileLayer(CONFIG.TILE_URL, { maxZoom: 19, attribution: 'Esri, Maxar' }).addTo(map);
       map.on('click', function (e) { setLoc(e.latlng.lat, e.latlng.lng, null, 'map'); });
+      mapApi = {
+        kind: 'imagery',
+        setPin: function (la, lo, center) {
+          var ll = [la, lo];
+          if (!marker) marker = L.circleMarker(ll, { radius: 9, color: '#fff', weight: 2, fillColor: '#EC2329', fillOpacity: 1 }).addTo(map);
+          else marker.setLatLng(ll);
+          if (center) map.setView(ll, Math.max(map.getZoom(), 15));
+        },
+        clearPin: function () { if (marker) { map.removeLayer(marker); marker = null; } },
+        invalidate: function () { setTimeout(function () { map.invalidateSize(); }, 50); }
+      };
       $('mapMsg').classList.add('hidden');
       if (S.lat != null) setLoc(S.lat, S.lon, S.acc, 'restore');
     } catch (e) { map = null; }
@@ -375,7 +406,7 @@
     $('nextBtn').classList.toggle('hidden', n === TOTAL);
     $('saveBtn').classList.toggle('hidden', n !== TOTAL);
     $('saveBtn').textContent = URGENT[safetyKind()] ? 'Save + send alert' : 'Save point';
-    if (n === 1) setTimeout(function () { initMap(); if (map) map.invalidateSize(); }, 50);
+    if (n === 1) setTimeout(function () { initMap(); if (mapApi) mapApi.invalidate(); }, 50);
     if (n === TOTAL) { renderReview(); renderR214(); }
     window.scrollTo(0, 0);
   }
@@ -485,7 +516,7 @@
     S.maxPhotos = CONFIG.MAX_PHOTOS; S.droneGroup = null; r214Touched = false;
     $('desc').value = ''; $('tfName').value = ''; $('tfStatus').value = ''; $('lat').value = ''; $('lon').value = '';
     $('coords').textContent = 'No location yet'; $('gpsBtn').textContent = 'Use My Location'; $('gpsBtn').classList.remove('ok');
-    if (marker && map) { map.removeLayer(marker); marker = null; }
+    if (mapApi) mapApi.clearPin();
     $('obsTime').value = localNow();
     renderPhotos();
   }
@@ -942,6 +973,11 @@
       loadAgolName();
       ensurePinForIncident();
       window.addEventListener('incident:changed', ensurePinForIncident);
+      // the response map follows the incident picked here / at Field App login (its own web map + project filters)
+      window.addEventListener('incident:changed', function () {
+        if (mapApi && mapApi.setIncident) mapApi.setIncident(S.incident).catch(function () {});
+        else if (S.step === 1) { if (!mapApi) initMap(); else upgradeMap(); }
+      });
       setTimeout(wakeKick, 800);
     });
     refreshStatus();
@@ -955,7 +991,7 @@
     S.maxPhotos = CONFIG.DRONE_PER_POINT; S.droneGroup = o.groupId; if (S.link) setLink(null);
     S.photos = o.photos.slice(0, S.maxPhotos).map(function (p) { return { blob: p.blob, name: p.name, meta: p.meta, url: URL.createObjectURL(p.blob) }; });
     S.lat = null; S.lon = null; S.acc = null;
-    if (marker && map) { map.removeLayer(marker); marker = null; }
+    if (mapApi) mapApi.clearPin();
     if (o.lat != null) { setLoc(o.lat, o.lon, null, 'drone'); $('coords').textContent += '  (from the drone photos: tap the map to move it)'; }
     else { $('coords').textContent = 'No location in these photos: tap the map, use GPS or type it'; $('lat').value = ''; $('lon').value = ''; }
     // R1 2026-11-12: a drone clock that was never set put a 214 line in 2025. The photos' time is used only
@@ -970,6 +1006,6 @@
     openSafety: openSafety, linkTitle: linkTitle, checkin: checkin, SAFETY: SAFETY, URGENT: URGENT,
     downscale: downscale, typeObj: typeObj, POOR_GPS_M: POOR_GPS_M,   // the 214's "Put this on the map" (forms-ui.js)
     refreshStatus: function () { return refreshStatus(); }, kick: function () { kick(); }, recordTitle: recordTitle,
-    askPin: function (m, inc) { askPin(m, inc); }, invalidateMap: function () { if (map) setTimeout(function () { map.invalidateSize(); }, 50); } };
+    askPin: function (m, inc) { askPin(m, inc); }, invalidateMap: function () { if (mapApi) mapApi.invalidate(); } };
   document.addEventListener('DOMContentLoaded', boot);
 })();

@@ -10,7 +10,7 @@
  *
  * APP_VERSION must equal the ?v= stamps in index.html; bump both together.
  */
-var APP_VERSION = '2026-11-13-1';
+var APP_VERSION = '2026-11-13-2';
 var CACHE = 'wri-recon-' + APP_VERSION;
 var LIB_CACHE = 'wri-recon-lib-leaflet-1.9.4';
 
@@ -22,7 +22,7 @@ var SHELL = [
   './assets/icons/icon-192.png', './assets/icons/icon-512.png',
   './css/app.css?v=' + APP_VERSION,
   './js/config.js?v=' + APP_VERSION, './js/store.js?v=' + APP_VERSION, './js/api.js?v=' + APP_VERSION,
-  './js/outbox.js?v=' + APP_VERSION, './js/forms.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION,
+  './js/outbox.js?v=' + APP_VERSION, './js/forms.js?v=' + APP_VERSION, './js/respmap.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION,
   './js/wrrl.js?v=' + APP_VERSION, './js/forms-ui.js?v=' + APP_VERSION, './js/dronemeta.js?v=' + APP_VERSION, './js/drone-ui.js?v=' + APP_VERSION, './js/drill-ui.js?v=' + APP_VERSION, './js/drill214.js?v=' + APP_VERSION, './js/hasp-embed.js?v=' + APP_VERSION
 ].concat(['aid_station', 'boat_ramp', 'current_boom_site', 'decon', 'drone_flight', 'fish_kill', 'hospital', 'icp',
   'injured_wildlife', 'injury', 'landing_zone', 'near_miss', 'oil_spotted', 'other_action', 'other_observation',

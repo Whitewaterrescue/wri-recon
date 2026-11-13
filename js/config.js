@@ -10,6 +10,9 @@ var CONFIG = {
   INCIDENT_OPS_VIEW: 'https://services6.arcgis.com/Ji79lWGR5B33LhY7/arcgis/rest/services/WRI_Incident_Ops_field_view/FeatureServer',
   // 2026-11-12: the org portal, read with the Field App's sign-in for the account's full name (Reporter step skip)
   PORTAL_URL: 'https://wrienviro.maps.arcgis.com',
+  // 2026-11-13: the Recon location step's response map when the incident's registry row has no webmap_id
+  // (the Field App's incident map; js/respmap.js filters it to the picked incident)
+  RESPONSE_WEBMAP: '373f7625cfc74c87a8523fbaf7ad9691',
   VESSEL_API: 'https://script.google.com/macros/s/AKfycbwRI7OYT1XKz6_u7fGq-4OYLPCcxxaWGAyNYSxvx7K_u_Z7nNB_PUh5uPuiZy59vNIj/exec',
   // Tabs shown. HASP sign-off and the vessel manifest are built (forms-ui.js, server APIs
   // live) but switched off 2026-10-26 per Cody; add 'hasp' / 'vessel' back here to show them.

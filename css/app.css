@@ -50,7 +50,9 @@ input.bad, select.bad, textarea.bad { border-color: #ff6b6f; box-shadow: 0 0 0 2
 .btn-back { background: var(--card); }
 .coords { font-size: 13px; color: var(--muted); margin-bottom: 10px; text-align: center; }
 .map-wrap { position: relative; height: 240px; border-radius: 8px; overflow: hidden; border: 1.5px solid var(--line); margin-bottom: 10px; background: var(--panel); }
-#map { position: absolute; inset: 0; }
+#map, #respMap { position: absolute; inset: 0; }
+/* 2026-11-13: the response map draws invisibly (it needs a real size) and replaces the imagery map once ready */
+#respMap.resp-pending { visibility: hidden; pointer-events: none; }
 .map-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px; color: var(--muted); font-size: 13px; background: rgba(42,44,44,.9); z-index: 500; }
 .toggle { display: flex; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
 .toggle button { flex: 1; padding: 10px; background: var(--panel); color: var(--text); border: none; font-size: 15px; }
@@ -279,3 +281,5 @@ main.view:not(#steps) { padding-bottom: calc(140px + env(safe-area-inset-bottom)
 .wrrl-res .wr .m { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .wrrl-pick { display: flex; align-items: center; gap: 10px; justify-content: space-between; background: rgba(46,160,67,.15);
   border: 1px solid rgba(46,160,67,.5); border-radius: 10px; padding: 8px 12px; margin: -4px 0 12px; font-size: 13px; }
+/* 2026-11-13: the response map never shows the ArcGIS SDK's own sign-in dialog (js/respmap.js) */
+.esri-identity-modal, .esri-identity-form { display: none !important; }
