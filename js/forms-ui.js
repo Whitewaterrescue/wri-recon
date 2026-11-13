@@ -140,6 +140,7 @@
     if (view === 'rr') {
       if (!$('rrName').value) $('rrName').value = A.lsGet('wri_recon_name') || checkinName(); renderMine('rr', $('rrList')); pollRr();
       renderPinNote($('rrPin')); renderOpenReq(); loadOpenReq();   // 2026-11-06: PIN up front + open requests
+      wrrlRefresh();
     }
     if (view === '214') renderPinNote($('l214Pin'));
     if (view === 'hasp') renderHasp();
@@ -885,6 +886,51 @@
   }
 
   // ---------- 213-RR ----------
+  // ---------- Find in the WRRL (2026-11-13, Cody; js/wrrl.js) ----------
+  // Picking an item fills What do you need, the supplier (the organization that lists it) and sends its WRRL id
+  // (Logistics puts "WRRL_ID: n" in the request notes, as the Ops V2 form did).
+  var wrrlPick = null, wrrlFound = [], findTimer = 0;
+  function wrrlRefresh() {
+    if (!window.WRRL) return;
+    renderFindHint();
+    WRRL.refresh(S.incident && S.incident.incident_id).then(function () { renderFindHint(); if ($('rrFind').value.trim()) runFind(); });
+  }
+  function renderFindHint() {
+    var i = WRRL.info(), h = $('rrFindHint');
+    if (i.count) h.textContent = i.count.toLocaleString() + ' WRRL items on this phone' + (i.at ? ' · updated ' + new Date(i.at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '') + ' · works with no signal';
+    else if (i.loading) h.textContent = 'Loading the WRRL onto this phone…';
+    else if (!S.incident) h.textContent = 'Pick the incident to load the WRRL onto this phone.';
+    else if (i.err === 'pin') h.textContent = 'Enter the incident PIN (above) to load the WRRL onto this phone.';
+    else if (!navigator.onLine) h.textContent = 'The WRRL loads the first time this page opens with signal. You can still type the request.';
+    else h.textContent = i.err ? 'Could not load the WRRL (' + i.err + '). You can still type the request.' : '';
+  }
+  function runFind() {
+    var q = $('rrFind').value.trim(), box = $('rrFindRes');
+    if (!q) { box.innerHTML = ''; return; }
+    var r = WRRL.search(q, 15);
+    wrrlFound = r.items;
+    box.innerHTML = r.items.length ? r.items.map(function (m, i) {
+      var name = m.ident || m.kind, meta = [m.org, m.kind !== name ? m.kind : '', m.spec, 'WRRL ' + m.id].filter(Boolean).join(' · ');
+      return '<button type="button" class="wr" data-i="' + i + '">' + A.esc(name) + '<span class="m">' + A.esc(meta) + '</span></button>';
+    }).join('') + (r.total > r.items.length ? '<div class="hint">' + r.total + ' matches; add a word to narrow it (e.g. an organization code).</div>' : '')
+      : '<div class="hint">' + (WRRL.info().count ? 'No WRRL match. Type the request below.' : '') + '</div>';
+  }
+  function setWrrlPick(m) {
+    wrrlPick = m;
+    $('rrPick').classList.toggle('hidden', !m);
+    $('rrPickTxt').textContent = m ? 'From the WRRL: ' + (m.ident || m.kind) + ' · ' + m.org + ' · WRRL ' + m.id : '';
+  }
+  function pickWrrl(m) {
+    var name = m.ident || m.kind;
+    var kindNote = m.kind && name.toLowerCase().indexOf(m.kind.toLowerCase()) < 0 ? ' (' + m.kind + ')' : '';
+    $('rrItem').value = name + kindNote + (m.spec ? ' - ' + m.spec : '');
+    if (!$('rrSupplier').value.trim()) $('rrSupplier').value = m.org;
+    setWrrlPick(m);
+    $('rrFind').value = ''; $('rrFindRes').innerHTML = '';
+    $('rrItem').dispatchEvent(new Event('input'));   // the duplicate check reads the item
+    $('rrQty').focus();
+  }
+
   function saveRr() {
     if (!needIncident()) return;
     var item = $('rrItem').value.trim(), who = $('rrName').value.trim();
@@ -910,10 +956,11 @@
         // 2026-11-13: the Ops V2 fields (More details); Logistics lgOfflineRr_ writes them to the same 213-RR columns
         tactical: ((document.querySelector('#rrTac .active') || {}).dataset || {}).val === 'Yes',
         branch: $('rrBranch').value.trim(), group: $('rrGroup').value.trim(),
-        substitutes: $('rrSubs').value.trim(), supplier: $('rrSupplier').value.trim() } },
+        substitutes: $('rrSubs').value.trim(), supplier: $('rrSupplier').value.trim(),
+        wrrl_id: wrrlPick ? wrrlPick.id : '' } },
       $('rrSave'), 'Request saved. Logistics sees it on the Incident Board within about 5 minutes of uploading.', function () {
         ['rrItem', 'rrWhere', 'rrWhen', 'rrNotes', 'rrSubs', 'rrSupplier'].forEach(function (id) { $(id).value = ''; }); $('rrQty').value = '1'; $('rrUom').value = 'EA';
-        setToggle('rrTac', 'No');
+        setToggle('rrTac', 'No'); setWrrlPick(null);
         dupAck = ''; rrSaveLabel(); renderOpenReq();
         renderMine('rr', $('rrList'));
         pinAfterSave();   // the submit-time PIN check stays
@@ -1166,6 +1213,10 @@
     $('l214Time').value = A.localNow(); $('l214Sec').value = SEC_HOST || A.lsGet('wri_214_section') || ''; secFromHost = !!SEC_HOST; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
     $('rrBranch').value = A.lsGet('wri_rr_branch') || ''; $('rrGroup').value = A.lsGet('wri_rr_group') || '';
     $('rrTac').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('rrTac', b.dataset.val); });
+    $('rrFind').addEventListener('input', function () { clearTimeout(findTimer); findTimer = setTimeout(runFind, 150); });
+    $('rrFindRes').addEventListener('click', function (e) { var b = e.target.closest('button[data-i]'); if (b && wrrlFound[+b.dataset.i]) pickWrrl(wrrlFound[+b.dataset.i]); });
+    $('rrPickX').addEventListener('click', function () { setWrrlPick(null); });
+    window.addEventListener('online', function () { if (view === 'rr') wrrlRefresh(); });
     $('l214Pos').value = myPosition(checkinName());   // batch 11: the check-in position
     renderDest();
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); renderWho(); renderMine('214', $('l214List')); });
@@ -1213,7 +1264,7 @@
     window.addEventListener('incident:changed', function () { if (!EMBED_HASP) openHasp = null; render(); });
     window.addEventListener('outbox:changed', function () {
       if (view === '214') { renderMine('214', $('l214List')); renderAlert(); renderPinNote($('l214Pin')); }
-      if (view === 'rr') { renderMine('rr', $('rrList')); renderPinNote($('rrPin')); }   // a PIN entered (Outbox.setPin) hides the note
+      if (view === 'rr') { renderMine('rr', $('rrList')); renderPinNote($('rrPin')); if (!window.WRRL || !WRRL.info().count) wrrlRefresh(); }   // a PIN entered (Outbox.setPin) hides the note
     });
 
     Store.kvGet('vessel_trip').then(function (t) { trip = t || null; render(); });

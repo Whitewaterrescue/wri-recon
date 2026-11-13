@@ -299,6 +299,12 @@
     <!-- open requests on the incident: same item / site shown as you type, overdue flagged (js/forms-ui.js loadOpenReq) -->
     <div class="rq-sum"><span id="rrOpenSum">Checking open requests on this incident&hellip;</span><button class="link hidden" id="rrOpenBtn" type="button">Show</button></div>
     <div class="rq-all hidden" id="rrOpenAll"></div>
+    <!-- 2026-11-13 (Cody): search the WRRL to fill the request (js/wrrl.js keeps the whole list on the phone, works offline) -->
+    <div class="field"><label for="rrFind">Find in the WRRL</label>
+      <input id="rrFind" type="search" autocomplete="off" placeholder="e.g. skimmer, 18 in boom, CRC">
+      <div class="hint" id="rrFindHint"></div>
+      <div class="wrrl-res" id="rrFindRes"></div></div>
+    <div class="wrrl-pick hidden" id="rrPick" role="status"><span id="rrPickTxt"></span><button class="link" id="rrPickX" type="button">Clear</button></div>
     <div class="field"><label for="rrItem">What do you need?</label><textarea id="rrItem" placeholder="e.g. 200 ft of 18 inch containment boom"></textarea></div>
     <div class="row">
       <div class="field"><label for="rrQty">Qty</label><input id="rrQty" inputmode="numeric" value="1"></div>
@@ -425,6 +431,7 @@
   <script src="js/outbox.js?v=2026-11-13-1"></script>
   <script src="js/forms.js?v=2026-11-13-1"></script>
   <script src="js/app.js?v=2026-11-13-1"></script>
+  <script src="js/wrrl.js?v=2026-11-13-1"></script>
   <script src="js/forms-ui.js?v=2026-11-13-1"></script>
   <script src="js/dronemeta.js?v=2026-11-13-1"></script>
   <script src="js/drone-ui.js?v=2026-11-13-1"></script>

@@ -23,7 +23,7 @@ var SHELL = [
   './css/app.css?v=' + APP_VERSION,
   './js/config.js?v=' + APP_VERSION, './js/store.js?v=' + APP_VERSION, './js/api.js?v=' + APP_VERSION,
   './js/outbox.js?v=' + APP_VERSION, './js/forms.js?v=' + APP_VERSION, './js/app.js?v=' + APP_VERSION,
-  './js/forms-ui.js?v=' + APP_VERSION, './js/dronemeta.js?v=' + APP_VERSION, './js/drone-ui.js?v=' + APP_VERSION, './js/drill-ui.js?v=' + APP_VERSION, './js/drill214.js?v=' + APP_VERSION, './js/hasp-embed.js?v=' + APP_VERSION
+  './js/wrrl.js?v=' + APP_VERSION, './js/forms-ui.js?v=' + APP_VERSION, './js/dronemeta.js?v=' + APP_VERSION, './js/drone-ui.js?v=' + APP_VERSION, './js/drill-ui.js?v=' + APP_VERSION, './js/drill214.js?v=' + APP_VERSION, './js/hasp-embed.js?v=' + APP_VERSION
 ].concat(['aid_station', 'boat_ramp', 'current_boom_site', 'decon', 'drone_flight', 'fish_kill', 'hospital', 'icp',
   'injured_wildlife', 'injury', 'landing_zone', 'near_miss', 'oil_spotted', 'other_action', 'other_observation',
   'other_safety', 'planned_boom_site', 'planned_staging_area', 'recovery_complete', 'response_action', 'river_hazard',
