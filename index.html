@@ -310,6 +310,18 @@
     <div class="rq-dup hidden" id="rrDup" role="status" aria-live="polite"></div>
     <div class="field"><label for="rrWhen">Needed by</label><input id="rrWhen" placeholder="e.g. tomorrow 0700"></div>
     <div class="field"><label for="rrNotes">Notes</label><textarea id="rrNotes"></textarea></div>
+    <!-- 2026-11-13: the rest of the Ops "Resource Request V2" fields, so this page can replace it everywhere -->
+    <details class="rr-more" id="rrMore">
+      <summary>More details (optional)</summary>
+      <div class="field"><label>Tactical?</label>
+        <div class="toggle" id="rrTac"><button type="button" data-val="No" class="active">No</button><button type="button" data-val="Yes">Yes</button></div></div>
+      <div class="row">
+        <div class="field"><label for="rrBranch">Branch</label><input id="rrBranch" placeholder="Branch"></div>
+        <div class="field"><label for="rrGroup">Division / Group</label><input id="rrGroup" placeholder="Division or group"></div>
+      </div>
+      <div class="field"><label for="rrSubs">Acceptable substitutes</label><input id="rrSubs" placeholder="Other items that would work"></div>
+      <div class="field"><label for="rrSupplier">Suggested supplier</label><input id="rrSupplier" placeholder="Vendor or supplier"></div>
+    </details>
     <div class="row">
       <div class="field"><label for="rrName">Requested by</label><input id="rrName" placeholder="Your name"></div>
       <div class="field"><label for="rrPos">Position</label><input id="rrPos" placeholder="e.g. TF Leader"></div>

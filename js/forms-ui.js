@@ -901,13 +901,19 @@
     }
     var pr = (document.querySelector('#rrPri .active') || {}).dataset;
     A.lsSet('wri_recon_name', who); A.lsSet('wri_rr_pos', $('rrPos').value.trim());
+    A.lsSet('wri_rr_branch', $('rrBranch').value.trim()); A.lsSet('wri_rr_group', $('rrGroup').value.trim());   // the same crew asks again
     clearTimeout(dupTimer);
     save({ recon_id: A.uuid(), kind: 'rr', incident: S.incident, fields: {
         item: item, qty: $('rrQty').value.trim() || '1', uom: $('rrUom').value.trim() || 'EA', priority: (pr && pr.val) || 'R',
         delivery: $('rrWhere').value.trim(), arrival: $('rrWhen').value.trim(), notes: $('rrNotes').value.trim(),
-        requester: who, position: $('rrPos').value.trim(), at: Date.now() } },
+        requester: who, position: $('rrPos').value.trim(), at: Date.now(),
+        // 2026-11-13: the Ops V2 fields (More details); Logistics lgOfflineRr_ writes them to the same 213-RR columns
+        tactical: ((document.querySelector('#rrTac .active') || {}).dataset || {}).val === 'Yes',
+        branch: $('rrBranch').value.trim(), group: $('rrGroup').value.trim(),
+        substitutes: $('rrSubs').value.trim(), supplier: $('rrSupplier').value.trim() } },
       $('rrSave'), 'Request saved. Logistics sees it on the Incident Board within about 5 minutes of uploading.', function () {
-        ['rrItem', 'rrWhere', 'rrWhen', 'rrNotes'].forEach(function (id) { $(id).value = ''; }); $('rrQty').value = '1'; $('rrUom').value = 'EA';
+        ['rrItem', 'rrWhere', 'rrWhen', 'rrNotes', 'rrSubs', 'rrSupplier'].forEach(function (id) { $(id).value = ''; }); $('rrQty').value = '1'; $('rrUom').value = 'EA';
+        setToggle('rrTac', 'No');
         dupAck = ''; rrSaveLabel(); renderOpenReq();
         renderMine('rr', $('rrList'));
         pinAfterSave();   // the submit-time PIN check stays
@@ -1158,6 +1164,8 @@
     $('l214Unit').addEventListener('change', function () { $('l214Save').textContent = this.checked ? 'Save note to my log + unit log' : 'Save note'; });
     $('tabs').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) showView(b.dataset.view); });
     $('l214Time').value = A.localNow(); $('l214Sec').value = SEC_HOST || A.lsGet('wri_214_section') || ''; secFromHost = !!SEC_HOST; $('rrPos').value = A.lsGet('wri_rr_pos') || '';
+    $('rrBranch').value = A.lsGet('wri_rr_branch') || ''; $('rrGroup').value = A.lsGet('wri_rr_group') || '';
+    $('rrTac').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) setToggle('rrTac', b.dataset.val); });
     $('l214Pos').value = myPosition(checkinName());   // batch 11: the check-in position
     renderDest();
     $('l214Name').addEventListener('change', function () { $('l214OtherBox').classList.toggle('hidden', this.value !== '__other__'); renderWho(); renderMine('214', $('l214List')); });
