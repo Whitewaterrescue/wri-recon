@@ -263,3 +263,8 @@ main.view:not(#steps) { padding-bottom: calc(140px + env(safe-area-inset-bottom)
 .who-strip b { color: #f0f0f0; }
 .who-strip.hidden, .tf-box.hidden { display: none; }
 .tf-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid #55595a; }
+
+/* 2026-11-13: ?view= single-app pages (js/forms-ui.js LOCK): Back from a hand-off (drone -> recon form) */
+.lock-back { display: block; width: 100%; padding: 10px 16px; background: var(--card); border: none; border-bottom: 1px solid #2f3232;
+  color: #fff; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
+.lock-back:active { background: #2f3232; }

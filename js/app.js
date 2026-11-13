@@ -109,7 +109,7 @@
         }
       }).catch(function () {
         if (!cached) {
-          $('incidentHint').textContent = 'Open Recon once with signal to load the lists. You can still pick a location now.';
+          $('incidentHint').textContent = 'Open this page once with signal to load the incident lists.';
         }
       });
     });
@@ -498,6 +498,8 @@
     unpark();   // a point set aside for a safety report comes back
     // a report started from the 214 tab's Safety buttons goes back there
     if (from === '214' && window.WRIForms) WRIForms.showView('214');
+    // 2026-11-13: the Drone page (?view=drone) opened this form for a new point; done with it, back to the photos
+    else if (window.WRIForms && WRIForms.lock === 'drone') WRIForms.showView('drone');
   }
 
   // ---------- one-tap safety reports (2026-11-05, batch 11) ----------
@@ -766,10 +768,16 @@
       if (!$('savedOverlay').classList.contains('hidden')) renderSaved();
     });
   }
+  var savedAll = false;
   function renderSaved() {
     Outbox.list().then(function (rs) {
       if (document.querySelector('#savedList [data-armed="1"]')) return;   // a Discard / Remove waits for its second tap
-      $('savedHint').textContent = rs.length ? 'Items stay here for a day after they upload.' : 'Nothing saved on this phone.';
+      // 2026-11-13: a one-app page (?view=rr, drill, ...) lists its own kind; "Show all" lists everything on the phone
+      var all = rs.length, own = (window.WRIForms && WRIForms.ownKind) || function () { return true; };
+      if (!savedAll) rs = rs.filter(own);
+      var others = all - rs.length;
+      $('savedHint').innerHTML = (rs.length ? 'Items stay here for a day after they upload.' : (others ? 'Nothing from this page on this phone.' : 'Nothing saved on this phone.')) +
+        (others ? ' <button class="link" type="button" id="savedAllBtn">Show ' + others + ' other item' + (others === 1 ? '' : 's') + ' on this phone</button>' : '');
       $('savedList').innerHTML = rs.map(function (r) {
         var t = typeObj(r.fields.observation_type), sent = r.photos.filter(function (p) { return p.status === 'sent'; }).length;
         var title = (!r.kind || r.kind === 'recon') ? ((t && t.label) || r.fields.observation_type) : recordTitle(r);
@@ -887,7 +895,8 @@
     $('pinInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') submitPin(); });
     $('pinCancel').addEventListener('click', cancelPin);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('pinOverlay').classList.contains('hidden')) cancelPin(); });
-    $('savedBtn').addEventListener('click', function () { $('savedOverlay').classList.remove('hidden'); renderSaved(); });
+    $('savedBtn').addEventListener('click', function () { savedAll = false; $('savedOverlay').classList.remove('hidden'); renderSaved(); });
+    $('savedHint').addEventListener('click', function (e) { if (e.target.id === 'savedAllBtn') { savedAll = true; renderSaved(); } });
     $('savedClose').addEventListener('click', function () { $('savedOverlay').classList.add('hidden'); });
     $('savedList').addEventListener('click', savedAction);
     $('sendNowBtn').addEventListener('click', function () {
@@ -898,7 +907,7 @@
     });
     $('banner').addEventListener('click', function () {
       if (this.dataset.act === 'pin') Outbox.needsPinIncident().then(function (inc) { askPin('The PIN changed or is wrong. Enter the current incident PIN.', inc); });
-      else { $('savedOverlay').classList.remove('hidden'); renderSaved(); }
+      else { savedAll = true; $('savedOverlay').classList.remove('hidden'); renderSaved(); }   // the banner counts everything on the phone
     });
 
     // iOS: storage is only protected once the app is on the Home Screen

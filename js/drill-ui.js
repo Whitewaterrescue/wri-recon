@@ -86,7 +86,8 @@
   }
 
   function render() {
-    if (!$('deList')) return;
+    // 2026-11-13: ?view=drill opens straight on this view, before boot() below has run (forms-ui boots first)
+    if (!$ || !$('deList')) return;
     if (!$('deName').value) $('deName').value = A.lsGet('wri_recon_name') || '';
     $('deNames').innerHTML = ((S.cfg && S.cfg.staff) || []).map(function (n) { return '<option value="' + A.esc(n) + '">'; }).join('');
     Outbox.list().then(function (rs) {
@@ -266,6 +267,7 @@
     window.addEventListener('outbox:changed', render);
     window.addEventListener('incident:changed', render);
     showMode('timeline');
+    render();   // the page may already be on this view (?view=drill / #drill)
   }
   window.DrillUI = { render: render, legacyItems: legacyItems, promptFor: promptFor };
   document.addEventListener('DOMContentLoaded', boot);

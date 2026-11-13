@@ -22,6 +22,14 @@
   // 2026-11-05 (batch 11): ?embed=hasp&hasp=<id>: the Field App's HASP page signs one plan here (js/hasp-embed.js)
   var EMBED_HASP = /[?&]embed=hasp(&|#|$)/.test(location.search);
   var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
+  // 2026-11-13 (Cody): ?view=recon|drone|rr|drill makes this page one app: no tab bar, the page stays on that view.
+  // The Field App menus link each one on its own (Forms › RECON, Resources › Resource Request, Project Manager ›
+  // Drill Eval, Drone › Photos → Recon points). Same site, so the outbox, PIN and offline cache stay shared.
+  // A drone page still opens the Recon form for "start a new point" and comes back after (Back / New point).
+  var LOCK = EMBED || EMBED_HASP ? '' : ((/[?&]view=(recon|drone|rr|drill)(&|#|$)/.exec(location.search) || [])[1] || '');
+  var LOCK_ALSO = { drone: ['recon'] };   // views a locked page may hand off to
+  // which outbox kinds "My entries" lists on a locked page (drone photos become recon points)
+  var LOCK_KINDS = { recon: ['recon'], drone: ['recon'], rr: ['rr'], drill: ['drill', 'drilldel'] };
 
   function staff() {
     var a = (S.cfg && S.cfg.staff) || [], b = (cfg.hasp && cfg.hasp.staff) || [], c = (cfg.vessel && cfg.vessel.staff) || [];
@@ -108,13 +116,17 @@
   function tabOn(v) { return !CONFIG.TABS || CONFIG.TABS.indexOf(v) >= 0; }
   function showView(v) {
     if (!TITLES[v] || !tabOn(v)) v = 'recon';
+    if (LOCK && v !== LOCK && (LOCK_ALSO[LOCK] || []).indexOf(v) < 0) v = LOCK;
     view = v;
     [].forEach.call($('tabs').children, function (b) { b.classList.toggle('active', b.dataset.view === v); });
     [].forEach.call(document.querySelectorAll('.view'), function (m) { m.classList.toggle('hidden', m.dataset.view !== v); });
     document.querySelector('.nav').classList.toggle('hidden', v !== 'recon');
     $('progressBar').classList.toggle('hidden', v !== 'recon');
     $('viewTitle').textContent = (v === 'recon' && A.linkTitle()) || TITLES[v];   // "Near miss report" (batch 11)
-    try { history.replaceState(null, '', location.pathname + location.search + (v === 'recon' ? '' : '#' + v)); } catch (e) {}
+    $('lockBack').classList.toggle('hidden', !(LOCK && v !== LOCK));
+    if (LOCK) document.title = TITLES[LOCK] + ' · WRI';
+    // a locked page keeps its own URL (no #view): reloading it opens the same app
+    try { history.replaceState(null, '', location.pathname + location.search + (v === 'recon' || LOCK ? '' : '#' + v)); } catch (e) {}
     if (v === 'recon') A.invalidateMap();
     render();
   }
@@ -1204,9 +1216,15 @@
     };
     refreshCfg();
     window.addEventListener('online', refreshCfg);
-    showView(EMBED ? '214' : ((location.hash || '').replace('#', '') || 'recon'));
+    if (LOCK) { $('tabs').classList.add('hidden'); document.body.classList.add('single-view'); }
+    if (LOCK) $('lockBack').textContent = '← Back to ' + TITLES[LOCK].toLowerCase();
+    $('lockBack').addEventListener('click', function () { showView(LOCK); });
+    showView(EMBED ? '214' : (LOCK || (location.hash || '').replace('#', '') || 'recon'));
   }
   window.WRIForms = { showView: function (v) { showView(v); }, refreshRequests: function () { pollRr(true); }, safetyFromRecon: safetyFromRecon,
+    lock: LOCK,
+    // "My entries" on a locked page: is this outbox record one of this page's kinds?
+    ownKind: function (r) { return !LOCK || (LOCK_KINDS[LOCK] || []).indexOf((r && r.kind) || 'recon') >= 0; },
     logFromRecon: logFromRecon,
     // 2026-11-06 (batch 13): the recon Save screen shows a safety point's alert live (js/app.js renderDone)
     alertView: alertView, pollAlert: function () { pollAlert(); },
