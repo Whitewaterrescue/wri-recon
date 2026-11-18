@@ -857,13 +857,17 @@
     $('rrOpenBtn').textContent = openReq.showAll ? 'Hide' : 'Show';
     all.classList.toggle('hidden', !openReq.showAll || !rows.length);
     if (openReq.showAll) all.innerHTML = rows.slice().sort(function (a, b) { return reqOverdue(b) - reqOverdue(a); }).map(function (r) { return reqLine(r); }).join('');
-    var m = dupMatches();
+    var m = dupMatches(), mi = dupItemMatches(m);
     dup.classList.toggle('hidden', !m.length);
-    dup.innerHTML = m.length ? '<div class="rq-head">Already open on this incident: check before you order again</div>' +
+    dup.innerHTML = m.length ? '<div class="rq-head">' + (mi.length ? 'Already open on this incident: check before you order again'
+        : 'Also going to this delivery site (for reference)') + '</div>' +
       m.slice(0, 4).map(function (x) { return reqLine(x.r, x.why); }).join('') + (m.length > 4 ? '<div class="hint">and ' + (m.length - 4) + ' more (tap Show above)</div>' : '') : '';
-    if (dupAck && dupAck !== dupKey(m)) rrSaveLabel();   // the form changed: ask again for the new match
+    if (dupAck && dupAck !== dupKey(mi)) rrSaveLabel();   // the form changed: ask again for the new match
   }
   function dupKey(m) { return m.map(function (x) { return x.r.request_id; }).join(','); }
+  // Only a SAME-ITEM match is a likely duplicate (score >= 2). Cody 2026-11-18: a light tower request was held
+  // back because a drum skimmer was going to the same site. Same-site requests still show, for reference only.
+  function dupItemMatches(m) { return (m || dupMatches()).filter(function (x) { return x.score >= 2; }); }
 
   // ---------- incident PIN up front (2026-11-06, batch 13 polish) ----------
   // Persona run: the Gateway PIN was asked only after the whole request was typed. A form tab now says so as it
@@ -936,8 +940,9 @@
     var item = $('rrItem').value.trim(), who = $('rrName').value.trim();
     if (!item) { A.markBad($('rrItem'), 'Describe what you need.'); $('rrItem').focus(); return A.toast('Describe what you need.'); }
     if (!who) { A.markBad($('rrName'), 'Enter your name.'); $('rrName').focus(); return A.toast('Enter your name.'); }
-    // a likely duplicate of an open request: show it and ask once (a second tap sends)
-    var m = dupMatches(), k = dupKey(m);
+    // a likely duplicate (same item) of an open request: show it and ask once (a second tap sends).
+    // A request that only shares the delivery site never holds the save.
+    var m = dupItemMatches(), k = dupKey(m);
     if (m.length && dupAck !== k) {
       dupAck = k; renderOpenReq();
       $('rrDup').scrollIntoView({ block: 'center', behavior: 'smooth' });
