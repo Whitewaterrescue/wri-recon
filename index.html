@@ -253,8 +253,9 @@
     <div class="step-title">Recovered (optional)</div>
     <div class="row">
       <input id="pgVol" type="number" inputmode="decimal" min="0" step="any" placeholder="Volume" style="flex:2">
-      <select id="pgUnit" style="flex:1"><option>bbl</option><option>gal</option><option>yd3</option><option>ton</option></select>
+      <select id="pgUnit" style="flex:1"><option value="gal">gallons</option><option value="bbl">bbl</option><option value="yd3">yd3</option><option value="ton">ton</option></select>
     </div>
+    <div class="hint" id="pgConv"></div>
     <div class="field"><label for="pgMat">Material</label><select id="pgMat"><option>oil</option><option>oily water</option><option>oiled solids</option><option>sorbents / PPE</option><option>other</option></select></div>
     <div class="field"><label for="pgNote">Note (optional)</label><textarea id="pgNote" rows="3" placeholder="What was done, what is left"></textarea></div>
     <button class="btn btn-save wide" id="pgSave" type="button">Save progress</button>

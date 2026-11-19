@@ -105,7 +105,7 @@
       source_ref: w.source_ref || '', recovered: rec } }, []).then(function () {
       A.busy(btn, false);
       A.toast('Saved.' + (navigator.onLine ? ' Uploading…' : ' No signal: it uploads when you’re back in coverage.'));
-      $('pgVol').value = ''; $('pgNote').value = ''; WA.status = '';
+      $('pgVol').value = ''; $('pgNote').value = ''; WA.status = ''; conv();
       try { navigator.serviceWorker && navigator.serviceWorker.ready.then(function (r) { return r.sync && r.sync.register('wri-recon-outbox'); }).catch(function () {}); } catch (e) {}
       draw();
     }, function (e) { A.busy(btn, false); A.toast('Could not save on this phone: ' + e.message, 8000); });
@@ -128,6 +128,13 @@
     });
   }
 
+  /** Crews think in gallons; the balance is kept in bbl (the server converts gal / 42). Show the bbl figure. */
+  function conv() {
+    var v = Number($('pgVol').value), u = $('pgUnit').value, box = $('pgConv');
+    if (!box) return;
+    box.textContent = u === 'gal' && v > 0 ? '= ' + (Math.round(v / 42 * 100) / 100) + ' bbl (42 gal = 1 bbl)' : '';
+  }
+
   function render() {
     if (!$ || !$('pgList')) return;
     if (!$('pgName').value) $('pgName').value = A.lsGet('wri_recon_name') || '';
@@ -144,6 +151,7 @@
     $('pgStatus').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { WA.status = b.dataset.val; draw(); } });
     $('pgSave').addEventListener('click', save);
     $('pgReload').addEventListener('click', function () { load(true); });
+    $('pgVol').addEventListener('input', conv); $('pgUnit').addEventListener('change', conv);
     window.addEventListener('outbox:changed', renderMine);
     window.addEventListener('incident:changed', function () { WA.inc = null; render(); });
     render();
