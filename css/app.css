@@ -283,3 +283,9 @@ main.view:not(#steps) { padding-bottom: calc(140px + env(safe-area-inset-bottom)
   border: 1px solid rgba(46,160,67,.5); border-radius: 10px; padding: 8px 12px; margin: -4px 0 12px; font-size: 13px; }
 /* 2026-11-13: the response map never shows the ArcGIS SDK's own sign-in dialog (js/respmap.js) */
 .esri-identity-modal, .esri-identity-form { display: none !important; }
+/* Work progress (2026-11-19) */
+.pg-wa { display: block; width: 100%; text-align: left; background: var(--panel); color: var(--text); border: 2px solid transparent; border-radius: 10px; padding: 10px 12px; margin: 6px 0; font: inherit; cursor: pointer; }
+.pg-wa.on { border-color: var(--red); }
+.pg-wa .pg-t { display: block; font-weight: 600; font-size: 15px; }
+.pg-wa .pg-m { display: block; font-size: 12px; opacity: .8; margin-top: 2px; }
+#pgStatus button { padding: 16px 10px; font-size: 17px; font-weight: 700; }

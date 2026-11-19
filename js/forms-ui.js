@@ -21,15 +21,15 @@
   var secFromHost = false;
   // 2026-11-05 (batch 11): ?embed=hasp&hasp=<id>: the Field App's HASP page signs one plan here (js/hasp-embed.js)
   var EMBED_HASP = /[?&]embed=hasp(&|#|$)/.test(location.search);
-  var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval' };
+  var TITLES = { recon: 'Recon', drone: 'Drone Photos', '214': 'ICS 214 Log', hasp: 'HASP Sign-off', vessel: 'Vessel Manifest', rr: 'Resource Request', drill: 'Drill Eval', progress: 'Work Progress' };
   // 2026-11-13 (Cody): ?view=recon|drone|rr|drill makes this page one app: no tab bar, the page stays on that view.
   // The Field App menus link each one on its own (Forms › RECON, Resources › Resource Request, Project Manager ›
   // Drill Eval, Drone › Photos → Recon points). Same site, so the outbox, PIN and offline cache stay shared.
   // A drone page still opens the Recon form for "start a new point" and comes back after (Back / New point).
-  var LOCK = EMBED || EMBED_HASP ? '' : ((/[?&]view=(recon|drone|rr|drill)(&|#|$)/.exec(location.search) || [])[1] || '');
+  var LOCK = EMBED || EMBED_HASP ? '' : ((/[?&]view=(recon|drone|rr|drill|progress)(&|#|$)/.exec(location.search) || [])[1] || '');
   var LOCK_ALSO = { drone: ['recon'] };   // views a locked page may hand off to
   // which outbox kinds "My entries" lists on a locked page (drone photos become recon points)
-  var LOCK_KINDS = { recon: ['recon'], drone: ['recon'], rr: ['rr'], drill: ['drill', 'drilldel'] };
+  var LOCK_KINDS = { recon: ['recon'], drone: ['recon'], rr: ['rr'], drill: ['drill', 'drilldel'], progress: ['progress'] };
 
   function staff() {
     var a = (S.cfg && S.cfg.staff) || [], b = (cfg.hasp && cfg.hasp.staff) || [], c = (cfg.vessel && cfg.vessel.staff) || [];
@@ -147,6 +147,7 @@
     if (view === 'vessel') renderVessel();
     if (view === 'drone' && window.DroneUI) window.DroneUI.render();
     if (view === 'drill' && window.DrillUI) window.DrillUI.render();
+    if (view === 'progress' && window.ProgressUI) window.ProgressUI.render();
   }
 
   // ---------- cached lists ----------
