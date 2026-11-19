@@ -9,5 +9,6 @@ self.FORM_KINDS = {
   'hasp': { label: 'HASP sign-off',   action: 'offline_ack',    url: function () { return CONFIG.HASP_API; } },
   'vessel': { label: 'Vessel manifest', action: 'offline_vessel', url: function () { return CONFIG.VESSEL_API; } },
   'drill':  { label: 'Drill Eval entry', action: 'offline_drill_eval', url: function () { return CONFIG.LOGISTICS_API; } },
+  'progress': { label: 'Work progress', action: 'offline_wa_progress', url: function () { return CONFIG.LOGISTICS_API; } },
   'drilldel': { label: 'Drill Eval delete', action: 'offline_drill_eval_edit', url: function () { return CONFIG.LOGISTICS_API; } }
 };

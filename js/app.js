@@ -871,6 +871,8 @@
     if (r.kind === 'drill') return ({ timeline: 'Timeline', notification: 'Notified', observation: 'Obs', hotwash: 'Hot wash' }[f.entry_kind] || 'Drill') +
       ': ' + String(f.item_label || f.note || '').slice(0, 60) + (f.status ? ' (' + f.status.replace('_', ' ') + ')' : '');
     if (r.kind === 'drilldel') return 'Delete: ' + String(f.label || '').slice(0, 60);
+    if (r.kind === 'progress') return (f.status === 'Completed' ? 'Complete: ' : 'In progress: ') + String(f.wa_label || '').slice(0, 50) +
+      (f.recovered ? ' · ' + f.recovered.volume + ' ' + f.recovered.unit + ' ' + f.recovered.material : '');
     return r.kind;
   }
 
