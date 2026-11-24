@@ -10,7 +10,7 @@
  *
  * APP_VERSION must equal the ?v= stamps in index.html; bump both together.
  */
-var APP_VERSION = '2026-11-19-1';
+var APP_VERSION = '2026-11-24-1';
 var CACHE = 'wri-recon-' + APP_VERSION;
 var LIB_CACHE = 'wri-recon-lib-leaflet-1.9.4';
 
@@ -27,7 +27,8 @@ var SHELL = [
 ].concat(['aid_station', 'boat_ramp', 'current_boom_site', 'decon', 'drone_flight', 'fish_kill', 'hospital', 'icp',
   'injured_wildlife', 'injury', 'landing_zone', 'near_miss', 'oil_spotted', 'other_action', 'other_observation',
   'other_safety', 'planned_boom_site', 'planned_staging_area', 'recovery_complete', 'response_action', 'river_hazard',
-  'road_closure', 'safety_briefing', 'scat_point', 'staging_area', 'stop_work', 'tactical_team'].map(function (c) { return './assets/obs/' + c + '.png'; }));
+  'road_closure', 'safety_briefing', 'scat_point', 'staging_area', 'stop_work', 'tactical_team',
+  'jic', 'waste_disposal', 'wildlife_rehab'].map(function (c) { return './assets/obs/' + c + '.png'; }));
 var LIBS = [
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
