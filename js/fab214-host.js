@@ -6,8 +6,10 @@
  * Gateway show. Field Forms is on the same origin (whitewaterrescue.github.io),
  * so the panel shares its saved name, incident PIN and offline outbox.
  *
- * It does nothing inside a frame or with ?from=fieldapp: the Field App shows the
- * dashboards in its own overlay and its LOG 214 button already floats on top.
+ * It does nothing with ?from=fieldapp: the Field App shows the dashboards in its
+ * own overlay and its LOG 214 button already floats on top. Inside a frame it runs
+ * only when every page above is on this origin and none of them floats a LOG 214
+ * already (a response viewer's panel, 2026-11-28); a frame on another site gets nothing.
  *
  * The host page may set, before or after this loads:
  *   window.WRI_214_HOST = {
@@ -24,9 +26,23 @@
  */
 (function () {
   if (window.__wri214Host) return;
+  if (/[?&]from=fieldapp(&|#|$)/.test(location.search)) return;
+  // 2026-11-28 (Cody: "make sure that the 214 opens inside the wrapper of the dashboards when it is loaded live to the
+  // Response Viewer dashboards"): inside a frame it runs too when every page above it is on this origin (the response
+  // viewers, the apps/ wrapper and the dashboards' Pages copies are all whitewaterrescue.github.io, so the panel still
+  // shares Field Forms' saved name, PIN and outbox), unless a page above already floats a LOG 214 (the Field App).
+  // A frame inside another site (an Apps Script page, a foreign embed) stays away as before.
   var framed = true;
   try { framed = window.self !== window.top; } catch (e) {}
-  if (framed || /[?&]from=fieldapp(&|#|$)/.test(location.search)) return;
+  if (framed) {
+    try {
+      for (var w = window.parent; ; w = w.parent) {
+        if (w.location.origin !== location.origin) return;              // throws for another origin: caught below
+        if (/[?&]from=fieldapp(&|#|$)/.test(w.location.search) || w.document.querySelector('.wri-214-fab')) return;
+        if (w === window.top) break;
+      }
+    } catch (e) { return; }
+  }
   window.__wri214Host = true;
 
   var FORMS = 'https://whitewaterrescue.github.io/wri-recon/';
